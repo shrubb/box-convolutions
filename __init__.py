@@ -1,1 +1,1 @@
-from box_convolution.integral_image import IntegralImageFunction
+from .box_convolution_module import BoxConv2d
