@@ -9,11 +9,28 @@ Burkov, E., & Lempitsky, V. (2018) **Deep Neural Networks with Box Convolutions*
 
 I intend to finish porting the layer to PyTorch by the end of 2018.
 
-<sup>If you are REALLY curious, the actual implementation used for experiments can be found [here](https://github.com/shrubb/integral-layer). It's undocumented and is in Torch7 (Lua).<sup>
+<sup>If you are REALLY curious, the actual implementation used for experiments can be found [here](https://github.com/shrubb/integral-layer). But please, please, don't use it. It's undocumented and is in Torch7 (Lua).<sup>
 
 # How to Use
 
-TODO
+Tested on Ubuntu 18.04 with Python 3.6 and PyTorch 1.0.0.
+
+## Installing
+
+```bash
+git clone https://github.com/shrubb/box-convolutions.git && cd box-convolutions
+pip3 install --user .
+```
+
+## Using
+
+```python3
+import torch
+from box_convolution import BoxConv2d
+# optionally, torch.nn.BoxConv2d = BoxConv2d
+
+help(BoxConv2d)
+```
 
 # Quick Tour of Box Convolutions
 
@@ -27,7 +44,7 @@ This is especially undesirable in dense prediction tasks (*segmentation, depth e
 
 Today people solve this by
 
-* dilated/deformable convolutions (can bring artifacts of degrade to `1×1` conv; almost always filter high-frequency);
+* dilated/deformable convolutions (can bring artifacts or degrade to `1×1` conv; almost always filter high-frequency);
 * "global" spatial pooling layers (usually too constrained, fixed size, not "fully convolutional").
 
 ### How does it work?
@@ -52,12 +69,13 @@ First we replaced every second block with a box convolution block (*Box*ENet in 
 
 * more accurate,
 * faster,
-* lighter.
+* lighter
+* **without dilated convolutions**.
 
-Then, we replaced **every** residual block (except the down- and up-sampling ones)! The result is
+Then, we replaced **every** residual block (except the down- and up-sampling ones)! The result, *BoxOnly*ENet, is
 
 * a **ConvNet almost without** (traditional learnable weight) **convolutions**,
-* 2 times less operations,
-* 3 times less parameters,
-* still more accurate than ENet!
+* **2** times less operations,
+* **3** times less parameters,
+* still **more accurate** than ENet!
 
