@@ -8,5 +8,5 @@ class IntegralImageFunction(torch.autograd.Function):
         return cpp_cuda.integral_image_forward(input)
 
     @staticmethod
-    def backward(ctx, grad):
-        return 2 * input * grad
+    def backward(ctx, grad_output):
+        return cpp_cuda.integral_image_backward(grad_output)

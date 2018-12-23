@@ -49,6 +49,7 @@ def test_integral_image():
         reference_result = integral_image_python(input_image)
         reference_result.backward(grad_output)
         reference_grad = input_image.grad.clone()
+        input_image.grad.zero_()
 
         our_result = IntegralImageFunction.apply(input_image)
         our_result.backward(grad_output)

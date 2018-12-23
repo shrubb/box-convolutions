@@ -13,8 +13,6 @@ I intend to finish porting the layer to PyTorch by the end of 2018.
 
 # How to Use
 
-Tested on Ubuntu 18.04 with Python 3.6 and PyTorch 1.0.0.
-
 ## Installing
 
 ```bash
@@ -31,6 +29,8 @@ from box_convolution import BoxConv2d
 
 help(BoxConv2d)
 ```
+
+Tested on Ubuntu 18.04 with Python 3.6 and PyTorch 1.0.0.
 
 # Quick Tour of Box Convolutions
 
