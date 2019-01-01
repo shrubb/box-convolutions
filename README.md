@@ -18,6 +18,13 @@ I intend to finish porting the layer to PyTorch by the end of 2018.
 ```bash
 git clone https://github.com/shrubb/box-convolutions.git && cd box-convolutions
 pip3 install --user .
+python3 -m box_convolution.test # if throws errors, please open a GitHub issue
+```
+
+To uninstall:
+
+```bash
+pip3 uninstall box_convolution
 ```
 
 ## Using

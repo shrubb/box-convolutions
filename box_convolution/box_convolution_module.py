@@ -20,10 +20,10 @@ class BoxConv2d(torch.nn.Module):
     def reset_parameters(self):
         """
             One of the various possible random box initializations.
-            Here's the one used in all original paper's experiments. TODO
         """
         # TODO speed up
         # TODO use torch's random generator
+        # TODO provide the algorithm used in all original paper's experiments?
         h_min, w_min = 2, 2
         for in_plane_idx in range(self.in_planes):
             for filter_idx in range(self.num_filters):
@@ -38,6 +38,60 @@ class BoxConv2d(torch.nn.Module):
                 self.x_max[in_plane_idx, filter_idx] = center_h + height/2
                 self.y_min[in_plane_idx, filter_idx] = center_w - width /2
                 self.y_max[in_plane_idx, filter_idx] = center_w + width /2
+
+    def draw_boxes(self, channels=None, resolution=(900, 900)):
+        """
+            Plots all rectangles corresponding to box filters. Useful for debugging.
+            Returns the resulting image, an (H x W x 3) tensor.
+
+            channels:   list of input channels to draw boxes for. Default: draw all boxes.
+            resolution: return image resolution. Default: 900 x 900
+        """
+        import cv2
+        import numpy as np
+
+        if channels is None:
+            channels = range(self.in_planes)
+
+        retval = np.zeros(resolution + (3,), dtype=np.uint8)
+
+        # draw gray lines at center
+        center = [resolution[0] // 2, resolution[1] // 2]
+        retval[center[0]] = 70
+        retval[:, center[1]] = 70
+
+        def random_color():
+            color = np.random.rand(3) * 255
+            mix = np.float64([220, 220, 220])
+            return np.uint8(0.5 * (color + mix))
+
+        colors = [
+            [255,   0,   0],
+            [  0, 255,   0],
+            [  0,   0, 255],
+            [255, 255, 255],
+            [255, 255,   0],
+            [255,   0, 255],
+            [  0, 255, 255],
+            [130, 130, 130],
+            [255,  60, 160],
+            [ 60, 170, 255]]
+        colors += [random_color() for _ in range(self.in_planes - len(colors))]
+        colors = np.uint8(colors)
+
+        x_min =  self.x_min.float()      / self.h_max * (resolution[0] / 2) + center[0]
+        y_min =  self.y_min.float()      / self.w_max * (resolution[1] / 2) + center[1]
+        x_max = (self.x_max.float() + 1) / self.h_max * (resolution[0] / 2) + center[0]
+        y_max = (self.y_max.float() + 1) / self.w_max * (resolution[1] / 2) + center[1]
+
+        for color, channel_idx in zip(colors, channels):
+            for filter_idx in range(self.num_filters):
+                cv2.rectangle(retval,
+                    (y_min[channel_idx, filter_idx], x_min[channel_idx, filter_idx]),
+                    (y_max[channel_idx, filter_idx], x_max[channel_idx, filter_idx]),
+                    color.tolist(), 1)
+
+        return retval
 
     def _clip_parameters(self):
         """
