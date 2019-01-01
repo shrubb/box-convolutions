@@ -6,6 +6,7 @@ import os
 source_root = 'src'
 source_files = [
 	'integral_image.cpp',
+	'box_convolution.cpp'
 ]
 
 cpp_cuda = torch.utils.cpp_extension.CUDAExtension(

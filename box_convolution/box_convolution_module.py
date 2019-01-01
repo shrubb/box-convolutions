@@ -11,6 +11,7 @@ class BoxConv2d(torch.nn.Module):
         self.num_filters = num_filters
         self.h_max, self.w_max = h_max, w_max
         self.stride_h, self.stride_w = stride_h, stride_w
+        self.exact = True
 
         self.x_min, self.x_max, self.y_min, self.y_max = \
             (torch.empty(in_planes, num_filters) for _ in range(4))

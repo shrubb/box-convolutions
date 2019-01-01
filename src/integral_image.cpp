@@ -35,8 +35,10 @@ at::Tensor integral_image_forward(at::Tensor input) {
             scalar_t *outputPtr = output.data<scalar_t>();
             
             for (int c = 0; c < nChannels; ++c) {
+                // Fill the 0-th row
                 std::memset(outputPtr, 0, (w+1)*sizeof(scalar_t));
                 
+                // Fill the rest
                 for (int row = 0; row < h; ++row) {
                     outputPtr[(row+1)*(w+1)] = 0.0;
 
@@ -96,7 +98,7 @@ at::Tensor integral_image_backward(at::Tensor grad_output) {
                     sum = 0;
                     for (int col = w-1; col >= 0; --col) {
                         sum += gradOutputPtr[(row+1)*(w+1) + (col+1)];
-                        gradInputPtr[row*w + col] = gradInputPtr[(row+1)*w + col] + sum;
+                        gradInputPtr[row*w + col] = sum + gradInputPtr[(row+1)*w + col];
                     }
                 }
 
