@@ -1,15 +1,17 @@
 Box Convolution Layer for ConvNets
 ==================================
 
-This is a PyTorch implementation of the box convolution layer as introduced in the 2018 NeurIPS [paper](https://papers.nips.cc/paper/7859-deep-neural-networks-with-box-convolutions):
+# Work in Progress
 
-Burkov, E., & Lempitsky, V. (2018) **Deep Neural Networks with Box Convolutions**. *Advances in Neural Information Processing Systems 31*, 6214-6224.
-
-# Work in progress
-
-I intend to finish porting the layer to PyTorch by the end of 2018.
+**Sorry, the code isn't ready yet** :slightly_frowning_face: I intend to finish porting the layer to PyTorch in early January.
 
 <sup>If you are REALLY curious, the actual implementation used for experiments can be found [here](https://github.com/shrubb/integral-layer). But please, please, don't use it. It's undocumented and is in Torch7 (Lua).<sup>
+
+# What This Is
+
+This will be a PyTorch implementation of the box convolution layer as introduced in the 2018 NeurIPS [paper](https://papers.nips.cc/paper/7859-deep-neural-networks-with-box-convolutions):
+
+Burkov, E., & Lempitsky, V. (2018) **Deep Neural Networks with Box Convolutions**. *Advances in Neural Information Processing Systems 31*, 6214-6224.
 
 # How to Use
 

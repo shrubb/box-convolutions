@@ -110,8 +110,3 @@ at::Tensor integral_image_backward(at::Tensor grad_output) {
 
     return gradInput;
 }
-
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("integral_image_forward", &integral_image_forward, "Integral image, forward");
-    m.def("integral_image_backward", &integral_image_backward, "Integral image, backward");
-}

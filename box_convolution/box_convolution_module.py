@@ -98,10 +98,10 @@ class BoxConv2d(torch.nn.Module):
             If a filter's width or height is negative, reset it to the minimum allowed positive.
             If the filter is >=twice higher or wider than the input image, shrink it back.
         """
-        pass
+        pass # TODO
 
     def forward(self, input):
         input_integrated = IntegralImageFunction.apply(input)
         conv_output = BoxConvolutionFunction.apply(
-            input_integrated, self.x_min, self.x_max, self.y_min, self.y_max)
+            input_integrated, self.x_min, self.x_max, self.y_min, self.y_max, input)
         return conv_output

@@ -178,23 +178,25 @@ def test_box_convolution_module():
         reference_result.backward(grad_output)
         reference_grad_input = input_image.grad.clone()
         input_image.grad.zero_()
-
+        
         our_result = box_convolution_wrapper(input_image, x_min, x_max, y_min, y_max)
         our_result.backward(grad_output)
         our_grad_input = input_image.grad.clone()
-
-        if not our_result.allclose(reference_result):
+        
+        if not our_result.allclose(reference_result, rtol=3e-5, atol=1e-5):
             raise ValueError(
                 'Test %d failed at forward pass.\n\nInput:\n%s\n\n'
-                'Our output:\n%s\n\nReference output:\n%s\n\n'
-                    % (test_idx, input_image, our_result, reference_result))
+                'Our output:\n%s\n\nReference output:\n%s\n\nMax diff: %f\n\n'
+                    % (test_idx, input_image, our_result, reference_result, \
+                       (our_result - reference_result).abs().max()))
 
-        if not our_grad_input.allclose(reference_grad_input):
+        if not our_grad_input.allclose(reference_grad_input, rtol=3e-5, atol=1e-5):
             raise ValueError(
                 'Test %d failed at backward pass.\n\nInput:\n%s\n\nOutput:\n%s\n\n'
-                'gradOutput:\n%s\n\nOur gradInput:\n%s\n\nReference gradInput:\n%s\n\n'
+                'gradOutput:\n%s\n\nOur gradInput:\n%s\n\n'
+                'Reference gradInput:\n%s\n\nMax diff: %f\n\n'
                     % (test_idx, input_image, our_result, grad_output, our_grad_input, \
-                       reference_grad_input))
+                       reference_grad_input, (our_grad_input-reference_grad_input).abs().max()))
 
         # check our grads w.r.t. parameters against finite differences
         for tensor in x_min, x_max, y_min, y_max:
