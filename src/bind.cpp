@@ -12,7 +12,7 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor input_integrated,
     at::Tensor x_min, at::Tensor x_max,
     at::Tensor y_min, at::Tensor y_max,
-    at::Tensor grad_output,
+    at::Tensor grad_output, at::Tensor grad_output_integrated,
     bool input_needs_grad,
     bool x_min_needs_grad, bool x_max_needs_grad,
     bool y_min_needs_grad, bool y_max_needs_grad);

@@ -44,7 +44,7 @@ def test_integral_image():
         h, w = random.randint(1+stride_h, 10), random.randint(1+stride_w, 10)
 
         input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True)
-        grad_output = (torch.rand(batch_size, in_planes, h+1, w+1) < 0.1).to(input_image.dtype)
+        grad_output = (torch.rand(batch_size, in_planes, h+1, w+1) < 0.15).to(input_image.dtype)
 
         reference_result = integral_image_reference(input_image)
         our_result = integral_image(input_image)
@@ -142,11 +142,11 @@ def test_box_convolution_module():
         return module(input)
 
     for test_idx in tqdm(range(30)):
-        batch_size = random.randint(1, 1)
-        in_planes = random.randint(1, 1)
-        num_filters = random.randint(1, 1)
+        batch_size = random.randint(1, 3)
+        in_planes = random.randint(1, 3)
+        num_filters = random.randint(1, 3)
         stride_h, stride_w = 1, 1 # may change in the future
-        h, w = random.randint(1+stride_h, 5), random.randint(1+stride_w, 5)
+        h, w = random.randint(1+stride_h, 10), random.randint(1+stride_w, 10)
         # exact = random.random() < 0.8
 
         input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True)
@@ -159,19 +159,8 @@ def test_box_convolution_module():
                 x_max[plane_idx, window_idx] = random.uniform(x_min[plane_idx, window_idx], h-1.5)
                 y_max[plane_idx, window_idx] = random.uniform(y_min[plane_idx, window_idx], w-1.5)
 
-        # x_min.round_()
-        # x_max.round_()
-        # y_min.round_()
-        # y_max.round_()
-
-        x_min.fill_(0)
-        x_max.fill_(1)
-        y_min.fill_(0)
-        y_max.fill_(0)
-
-        # grad_output = \
-        #     (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.1).to(input_image.dtype)
-        grad_output = torch.rand(batch_size, in_planes*num_filters, h, w)
+        grad_output = \
+            (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(input_image.dtype)
 
         # check output and grad w.r.t. input vs reference ones
         reference_result = box_convolution_reference(input_image, x_min, x_max, y_min, y_max)
