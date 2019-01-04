@@ -1,7 +1,6 @@
 import torch
 import random
 
-from .integral_image import IntegralImageFunction
 from .box_convolution_function import BoxConvolutionFunction
 
 class BoxConv2d(torch.nn.Module):
@@ -101,7 +100,5 @@ class BoxConv2d(torch.nn.Module):
         pass # TODO
 
     def forward(self, input):
-        input_integrated = IntegralImageFunction.apply(input)
-        conv_output = BoxConvolutionFunction.apply(
-            input_integrated, self.x_min, self.x_max, self.y_min, self.y_max, input)
-        return conv_output
+        return BoxConvolutionFunction.apply(
+            input, self.x_min, self.x_max, self.y_min, self.y_max)

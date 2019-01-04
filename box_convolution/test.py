@@ -8,6 +8,7 @@ except ImportError:
     tqdm = lambda x: x
 
 def test_integral_image():
+    # TODO use torch.cumsum
     def integral_image_reference(input):
         assert input.ndimension() >= 2
         h, w = input.shape[-2:]
@@ -33,7 +34,7 @@ def test_integral_image():
 
         return output
 
-    from .integral_image import IntegralImageFunction
+    from box_convolution_cpp_cuda import integral_image
 
     # check IntegralImageFunction vs reference implementation
     for test_idx in tqdm(range(30)):
@@ -46,25 +47,13 @@ def test_integral_image():
         grad_output = (torch.rand(batch_size, in_planes, h+1, w+1) < 0.1).to(input_image.dtype)
 
         reference_result = integral_image_reference(input_image)
-        reference_result.backward(grad_output)
-        reference_grad = input_image.grad.clone()
-        input_image.grad.zero_()
-
-        our_result = IntegralImageFunction.apply(input_image)
-        our_result.backward(grad_output)
-        our_grad = input_image.grad.clone()
+        our_result = integral_image(input_image)
 
         if not our_result.allclose(reference_result):
             raise ValueError(
                 'Test %d failed at forward pass.\n\nInput:\n%s\n\n'
                 'Our output:\n%s\n\nReference output:\n%s\n\n'
                     % (test_idx, input_image, our_result, reference_result))
-
-        if not our_grad.allclose(reference_grad):
-            raise ValueError(
-                'Test %d failed at backward pass.\n\nInput:\n%s\n\nOutput:\n%s\n\n'
-                'gradOutput:\n%s\n\nOur gradInput:\n%s\n\nReference gradInput:\n%s\n\n'
-                    % (test_idx, input_image, our_result, grad_output, our_grad, reference_grad))
 
 def test_box_convolution_module():
     def explicit_box_kernel(x_min, x_max, y_min, y_max, normalize=False):
@@ -153,11 +142,11 @@ def test_box_convolution_module():
         return module(input)
 
     for test_idx in tqdm(range(30)):
-        batch_size = random.randint(1, 3)
-        in_planes = random.randint(1, 3)
-        num_filters = random.randint(1, 3)
+        batch_size = random.randint(1, 1)
+        in_planes = random.randint(1, 1)
+        num_filters = random.randint(1, 1)
         stride_h, stride_w = 1, 1 # may change in the future
-        h, w = random.randint(1+stride_h, 10), random.randint(1+stride_w, 10)
+        h, w = random.randint(1+stride_h, 5), random.randint(1+stride_w, 5)
         # exact = random.random() < 0.8
 
         input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True)
@@ -170,8 +159,19 @@ def test_box_convolution_module():
                 x_max[plane_idx, window_idx] = random.uniform(x_min[plane_idx, window_idx], h-1.5)
                 y_max[plane_idx, window_idx] = random.uniform(y_min[plane_idx, window_idx], w-1.5)
 
-        grad_output = \
-            (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.1).to(input_image.dtype)
+        # x_min.round_()
+        # x_max.round_()
+        # y_min.round_()
+        # y_max.round_()
+
+        x_min.fill_(0)
+        x_max.fill_(1)
+        y_min.fill_(0)
+        y_max.fill_(0)
+
+        # grad_output = \
+        #     (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.1).to(input_image.dtype)
+        grad_output = torch.rand(batch_size, in_planes*num_filters, h, w)
 
         # check output and grad w.r.t. input vs reference ones
         reference_result = box_convolution_reference(input_image, x_min, x_max, y_min, y_max)
@@ -202,12 +202,14 @@ def test_box_convolution_module():
         for tensor in x_min, x_max, y_min, y_max:
             tensor.requires_grad_()
 
-        torch.autograd.gradcheck(
-            box_convolution_wrapper, (input_image, x_min, x_max, y_min, y_max),
-            eps=0.05, raise_exception=True)
+        # torch.autograd.gradcheck(
+        #     box_convolution_wrapper, (input_image, x_min, x_max, y_min, y_max),
+        #     eps=0.05, raise_exception=True)
 
 if __name__ == '__main__':
     seed = int(time.time())
+    seed = 1546545756
+    torch.manual_seed(seed)
     random.seed(seed)
     print('Random seed is %d' % seed)
 
