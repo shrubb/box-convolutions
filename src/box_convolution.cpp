@@ -6,6 +6,8 @@
 
 #define CHECK_CONTIGUOUS(x) AT_CHECK(x.is_contiguous(), #x " must be contiguous")
 
+at::Tensor integral_image(at::Tensor input);
+
 // Splits x_min, x_max, y_min, y_max into integer and fractional parts
 void splitParametersCPU(
     at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
@@ -242,7 +244,7 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor input_integrated,
     at::Tensor x_min, at::Tensor x_max,
     at::Tensor y_min, at::Tensor y_max,
-    at::Tensor grad_output, at::Tensor grad_output_integrated,
+    at::Tensor grad_output,
     bool input_needs_grad,
     bool x_min_needs_grad, bool x_max_needs_grad,
     bool y_min_needs_grad, bool y_max_needs_grad) {
@@ -273,6 +275,8 @@ std::vector<at::Tensor> box_convolution_backward(
     const int h = input_integrated.size(2) - 1;
     const int w = input_integrated.size(3) - 1;
 
+    grad_output = grad_output.reshape({batchSize, nInputPlanes, numFilters, h, w});
+
     // Return values
     // TODO change `nullTensor` to Python `None`
     at::Tensor nullTensor = at::empty({0}, at::TensorOptions().is_variable(true));
@@ -297,8 +301,7 @@ std::vector<at::Tensor> box_convolution_backward(
     auto yMaxFrac = at::empty(x_min.sizes(), fracOptions);
 
     if (input_needs_grad) {
-        grad_output_integrated = 
-            grad_output_integrated.reshape({batchSize, nInputPlanes, numFilters, h+1, w+1});
+        at::Tensor grad_output_integrated = integral_image(grad_output);
 
         at::Tensor tmpArray = at::empty(
             {batchSize, nInputPlanes, numFilters, h, w}, grad_output.options());
