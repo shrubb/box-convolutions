@@ -8,7 +8,7 @@ void splitParameters(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac) {
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "splitParametersCPU", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "cpu::splitParameters", ([&] {
         scalar_t minInt, maxInt;
 
         for (int i = 0; i < x_min.numel(); ++i) {
@@ -27,6 +27,35 @@ void splitParameters(
             maxInt = std::floor(y_max.data<scalar_t>()[i]);
             yMaxFrac.data<scalar_t>()[i] = y_max.data<scalar_t>()[i] - maxInt;
             yMaxInt.data<int>()[i] = static_cast<int>(maxInt) + 1;
+        }
+    }));
+}
+
+// Splits x_min, x_max, y_min, y_max into integer and fractional parts
+void splitParametersAccGradParameters(
+    at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
+    at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
+    at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac) {
+
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "cpu::splitParametersAccGradParams", ([&] {
+        scalar_t minInt, maxInt;
+
+        for (int i = 0; i < x_min.numel(); ++i) {
+            minInt = std::ceil(x_min.data<scalar_t>()[i] - 1);
+            xMinFrac.data<scalar_t>()[i] = minInt - x_min.data<scalar_t>()[i] + 1;
+            xMinInt.data<int>()[i] = static_cast<int>(minInt);
+
+            minInt = std::ceil(y_min.data<scalar_t>()[i] - 1);
+            yMinFrac.data<scalar_t>()[i] = minInt - y_min.data<scalar_t>()[i] + 1;
+            yMinInt.data<int>()[i] = static_cast<int>(minInt);
+
+            maxInt = std::floor(x_max.data<scalar_t>()[i]);
+            xMaxFrac.data<scalar_t>()[i] = x_max.data<scalar_t>()[i] - maxInt;
+            xMaxInt.data<int>()[i] = static_cast<int>(maxInt);
+
+            maxInt = std::floor(y_max.data<scalar_t>()[i]);
+            yMaxFrac.data<scalar_t>()[i] = y_max.data<scalar_t>()[i] - maxInt;
+            yMaxInt.data<int>()[i] = static_cast<int>(maxInt);
         }
     }));
 }
@@ -367,6 +396,103 @@ void boxConvUpdateGradInput(
             } // inPlaneIdx
         } // batchIdx
     }));
+}
+
+// tmpArray size: {batchSize, nInputPlanes, numFilters, h, w}
+void boxConvAccGradParameters(
+    at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
+    at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
+    at::Tensor & input_integrated, at::Tensor & tmpArray, int paramIdx) {
+
+    const int h = tmpArray.size(-2);
+    const int w = tmpArray.size(-1);
+
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "cpu::boxConvAccGradParameters", ([&] {
+        using std::min;
+        using std::max;
+
+        auto xMinIntAcsr = xMinInt.accessor<int, 2>();
+        auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
+        auto yMinIntAcsr = yMinInt.accessor<int, 2>();
+        auto yMaxIntAcsr = yMaxInt.accessor<int, 2>();
+
+        auto xMinFracAcsr = xMinFrac.accessor<scalar_t, 2>();
+        auto xMaxFracAcsr = xMaxFrac.accessor<scalar_t, 2>();
+        auto yMinFracAcsr = yMinFrac.accessor<scalar_t, 2>();
+        auto yMaxFracAcsr = yMaxFrac.accessor<scalar_t, 2>();
+
+        scalar_t *tmpArrayData = tmpArray.data<scalar_t>();
+
+        for (int batchIdx = 0; batchIdx < input_integrated.size(0); ++batchIdx) {
+            for (int inPlaneIdx = 0; inPlaneIdx < input_integrated.size(1); ++inPlaneIdx) {
+                
+                auto inputIntPlane = 
+                    input_integrated[batchIdx][inPlaneIdx];
+                auto inputIntAcsr = inputIntPlane.accessor<scalar_t, 2>();
+
+                for (int filterIdx = 0; filterIdx < xMinInt.size(1); ++filterIdx) {
+
+                    const int xMinInt = xMinIntAcsr[inPlaneIdx][filterIdx];
+                    const int xMaxInt = xMaxIntAcsr[inPlaneIdx][filterIdx];
+                    const int yMinInt = yMinIntAcsr[inPlaneIdx][filterIdx];
+                    const int yMaxInt = yMaxIntAcsr[inPlaneIdx][filterIdx];
+
+                    const scalar_t xMinFrac = xMinFracAcsr[inPlaneIdx][filterIdx];
+                    const scalar_t xMaxFrac = xMaxFracAcsr[inPlaneIdx][filterIdx];
+                    const scalar_t yMinFrac = yMinFracAcsr[inPlaneIdx][filterIdx];
+                    const scalar_t yMaxFrac = yMaxFracAcsr[inPlaneIdx][filterIdx];
+                    
+                    for (int x = 1; x <= h; ++x) {
+                        for (int y = 1; y <= w; ++y) {
+
+                            int valid;
+                            int cornerX, cornerY;
+
+                            // TODO maybe use `input` instead of `inputInt`
+                            valid =
+                                not (y+yMinInt < 1) & not (y+yMinInt > w) & not (x+xMinInt < 1);
+                            cornerX = max(0,min(h-1,x+xMinInt-1));
+                            cornerY = max(0,min(w-1,y+yMinInt-1));
+                            const scalar_t tlCorner = valid * 
+                                ( inputIntAcsr[cornerX+1][cornerY+1]
+                                - inputIntAcsr[cornerX  ][cornerY+1]
+                                - inputIntAcsr[cornerX+1][cornerY  ]
+                                + inputIntAcsr[cornerX  ][cornerY  ]);
+                            
+                            valid = 
+                                not (y+yMaxInt < 0) & not (y+yMaxInt >= w) & not (x+xMinInt < 1);
+                            cornerX = max(0,min(h-1,x+xMinInt-1));
+                            cornerY = max(0,min(w-1,y+yMaxInt  ));
+                            const scalar_t trCorner = valid * 
+                                ( inputIntAcsr[cornerX+1][cornerY+1]
+                                - inputIntAcsr[cornerX  ][cornerY+1]
+                                - inputIntAcsr[cornerX+1][cornerY  ]
+                                + inputIntAcsr[cornerX  ][cornerY  ]);
+                            
+                            scalar_t delta = 0;
+
+                            delta += trCorner * yMaxFrac;
+                            delta += tlCorner * yMinFrac;
+
+                            delta += inputIntAcsr
+                                [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt  , w))];
+                            delta -= inputIntAcsr
+                                [max(0,min(x+xMinInt-1, h))][max(0,min(y+yMaxInt  , w))];
+                            delta -= inputIntAcsr
+                                [max(0,min(x+xMinInt  , h))][max(0,min(y+yMinInt  , w))];
+                            delta += inputIntAcsr
+                                [max(0,min(x+xMinInt-1, h))][max(0,min(y+yMinInt  , w))];
+
+                            delta *= (x+xMinInt >= 1) & (x+xMinInt <= h);
+                            
+                            *(tmpArrayData++) = -delta;
+                        }
+                    }
+                } // filterIdx
+            } // inPlaneIdx
+        } // batchIdx
+    }));
+
 }
 
 } // namespace cpu

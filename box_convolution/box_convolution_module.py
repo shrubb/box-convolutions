@@ -13,30 +13,33 @@ class BoxConv2d(torch.nn.Module):
         self.exact = True
 
         self.x_min, self.x_max, self.y_min, self.y_max = \
-            (torch.empty(in_planes, num_filters) for _ in range(4))
-        self.reset_parameters()
+            (torch.nn.Parameter(torch.empty(in_planes, num_filters)) for _ in range(4))
+        # self.reset_parameters()
 
     def reset_parameters(self):
         """
             One of the various possible random box initializations.
         """
-        # TODO speed up
-        # TODO use torch's random generator
-        # TODO provide the algorithm used in all original paper's experiments?
-        h_min, w_min = 2, 2
-        for in_plane_idx in range(self.in_planes):
-            for filter_idx in range(self.num_filters):
-                center_h = random.uniform(-self.h_max*2/4.8+1+h_min/2, self.h_max*2/4.8-1-h_min/2)
-                center_w = random.uniform(-self.w_max*2/4.8+1+w_min/2, self.w_max*2/4.8-1-w_min/2)
-                height = 2 * random.uniform(
-                    h_min/2, min((self.h_max-1)-center_h, center_h-(-self.h_max+1)))
-                width  = 2 * random.uniform(
-                    w_min/2, min((self.w_max-1)-center_w, center_w-(-self.w_max+1)))
+        with torch.no_grad():
+            # TODO speed up
+            # TODO use torch's random generator
+            # TODO provide the algorithm used in all original paper's experiments?
+            h_min, w_min = 2, 2
+            for in_plane_idx in range(self.in_planes):
+                for filter_idx in range(self.num_filters):
+                    center_h = random.uniform(
+                        -self.h_max*2/4.8+1+h_min/2, self.h_max*2/4.8-1-h_min/2)
+                    center_w = random.uniform(
+                        -self.w_max*2/4.8+1+w_min/2, self.w_max*2/4.8-1-w_min/2)
+                    height = 2 * random.uniform(
+                        h_min/2, min((self.h_max-1)-center_h, center_h-(-self.h_max+1)))
+                    width  = 2 * random.uniform(
+                        w_min/2, min((self.w_max-1)-center_w, center_w-(-self.w_max+1)))
 
-                self.x_min[in_plane_idx, filter_idx] = center_h - height/2
-                self.x_max[in_plane_idx, filter_idx] = center_h + height/2
-                self.y_min[in_plane_idx, filter_idx] = center_w - width /2
-                self.y_max[in_plane_idx, filter_idx] = center_w + width /2
+                    self.x_min[in_plane_idx, filter_idx] = center_h - height/2
+                    self.x_max[in_plane_idx, filter_idx] = center_h + height/2
+                    self.y_min[in_plane_idx, filter_idx] = center_w - width /2
+                    self.y_max[in_plane_idx, filter_idx] = center_w + width /2
 
     def draw_boxes(self, channels=None, resolution=(900, 900)):
         """
@@ -51,7 +54,7 @@ class BoxConv2d(torch.nn.Module):
 
         if channels is None:
             channels = range(self.in_planes)
-
+        
         retval = np.zeros(resolution + (3,), dtype=np.uint8)
 
         # draw gray lines at center

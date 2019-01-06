@@ -41,7 +41,7 @@ at::Tensor box_convolution_forward(
     auto yMaxFrac = at::empty(x_min.sizes(), fracOptions);
 
     if (x_min.is_cuda()) {
-        THError("NYI: GPU split_params");
+        THError("NYI: gpu::splitParameters");
     } else {
         cpu::splitParameters(
             x_min   , x_max   , y_min   , y_max   ,
@@ -62,7 +62,7 @@ at::Tensor box_convolution_forward(
 
     // Actually fill `output`
     if (input_integrated.is_cuda()) {
-        THError("NYI: GPU box_convolution_forward");
+        THError("NYI: gpu::boxConvUpdateOutput");
     } else {
         cpu::boxConvUpdateOutput(
             xMinInt , xMaxInt , yMinInt , yMaxInt ,
@@ -136,7 +136,7 @@ std::vector<at::Tensor> box_convolution_backward(
         CHECK_CONTIGUOUS(tmpArray);
 
         if (gradInput.is_cuda()) {
-            THError("NYI: GPU box_convolution_backward");
+            THError("NYI: gpu::boxConvUpdateGradInput");
         } else {
             cpu::boxConvUpdateGradInput(
                 x_min, x_max, y_min, y_max,
@@ -151,8 +151,42 @@ std::vector<at::Tensor> box_convolution_backward(
     bool paramNeedsGrad[4] = {x_min_needs_grad, x_max_needs_grad, y_min_needs_grad, y_max_needs_grad};
     at::Tensor gradParam[4] = {nullTensor, nullTensor, nullTensor, nullTensor};
 
-    for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
+    at::Tensor tmpArray;
+    
+    bool someParamNeedsGrad = false;
+    for (bool needsGrad : paramNeedsGrad) {
+        someParamNeedsGrad |= needsGrad;
+    }
 
+    if (someParamNeedsGrad) {
+        tmpArray = at::empty({batchSize, nInputPlanes, numFilters, h, w}, x_min.options());
+
+        if (x_min.is_cuda()) {
+            THError("NYI: gpu::splitParameters");
+        } else {
+            cpu::splitParametersAccGradParameters(
+                x_min   , x_max   , y_min   , y_max   ,
+                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
+        }
+    }
+
+    for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
+        if (paramNeedsGrad[paramIdx]) {
+            if (input_integrated.is_cuda()) {
+                THError("NYI: gpu::boxConvAccGradParameters");
+            } else {
+                cpu::boxConvAccGradParameters(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    input_integrated, tmpArray, paramIdx);
+            }
+
+            tmpArray.mul_(grad_output);
+
+            gradParam[paramIdx] = 
+                tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum({0, 3});
+        }
     }
 
     return {gradInput, gradParam[0], gradParam[1], gradParam[2], gradParam[3]};

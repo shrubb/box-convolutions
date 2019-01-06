@@ -56,6 +56,8 @@ def test_integral_image():
                     % (test_idx, input_image, our_result, reference_result))
 
 def test_box_convolution_module():
+    gradcheck_step = 1e-4
+
     def explicit_box_kernel(x_min, x_max, y_min, y_max, normalize=False):
         import math
         h_farthest = math.ceil(max(x_max, -x_min))
@@ -133,11 +135,11 @@ def test_box_convolution_module():
         in_planes, num_filters = x_min.shape
         assert input.shape[1] == in_planes
 
-        module = BoxConv2d(in_planes, num_filters, -1, -1)
-        module.x_min.copy_(x_min)
-        module.x_max.copy_(x_max)
-        module.y_min.copy_(y_min)
-        module.y_max.copy_(y_max)
+        module = BoxConv2d(in_planes, num_filters, -1, -1).type(input.dtype)
+        del module.x_min; module.x_min = x_min
+        del module.x_max; module.x_max = x_max
+        del module.y_min; module.y_min = y_min
+        del module.y_max; module.y_max = y_max
 
         return module(input)
 
@@ -151,13 +153,31 @@ def test_box_convolution_module():
 
         input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True)
         
+        # sample boxes more or less randomly (algorithm isn't practical but is OK for gradcheck)
         x_min, x_max, y_min, y_max = (torch.empty(in_planes, num_filters) for _ in range(4))
         for plane_idx in range(in_planes):
-            for window_idx in range(num_filters):
-                x_min[plane_idx, window_idx] = random.uniform(-h+2.5, h-1.5)
-                y_min[plane_idx, window_idx] = random.uniform(-w+2.5, w-1.5)
-                x_max[plane_idx, window_idx] = random.uniform(x_min[plane_idx, window_idx], h-1.5)
-                y_max[plane_idx, window_idx] = random.uniform(y_min[plane_idx, window_idx], w-1.5)
+            for filter_idx in range(num_filters):
+                
+                box_is_valid = False
+                while not box_is_valid:
+                    x_min_curr = random.uniform(-h+2.5, h-1.5)
+                    y_min_curr = random.uniform(-w+2.5, w-1.5)
+                    x_max_curr = random.uniform(x_min_curr, h-1.5)
+                    y_max_curr = random.uniform(y_min_curr, w-1.5)
+
+                    # As a function of box coordinates (x_min etc.), box convolution isn't smooth
+                    # at integer points, so the finite difference gradcheck will fail.
+                    # Therefore, let's resample the box until all coordinates are far 
+                    # enough from integers.
+                    box_is_valid = True
+                    for value in x_min_curr, y_min_curr, x_max_curr, y_max_curr:
+                        if abs(value - round(value)) <= gradcheck_step:
+                            box_is_valid = False
+
+                x_min[plane_idx, filter_idx] = x_min_curr
+                y_min[plane_idx, filter_idx] = y_min_curr
+                x_max[plane_idx, filter_idx] = x_max_curr
+                y_max[plane_idx, filter_idx] = y_max_curr
 
         grad_output = \
             (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(input_image.dtype)
@@ -167,7 +187,7 @@ def test_box_convolution_module():
         reference_result.backward(grad_output)
         reference_grad_input = input_image.grad.clone()
         input_image.grad.zero_()
-        
+
         our_result = box_convolution_wrapper(input_image, x_min, x_max, y_min, y_max)
         our_result.backward(grad_output)
         our_grad_input = input_image.grad.clone()
@@ -187,17 +207,33 @@ def test_box_convolution_module():
                     % (test_idx, input_image, our_result, grad_output, our_grad_input, \
                        reference_grad_input, (our_grad_input-reference_grad_input).abs().max()))
 
-        # check our grads w.r.t. parameters against finite differences
+        # convert to double and check our grads w.r.t. parameters against finite differences
+        with torch.no_grad():
+            input_image = input_image.double()
+            x_min = x_min.double()
+            x_max = x_max.double()
+            y_min = y_min.double()
+            y_max = y_max.double()
+
         for tensor in x_min, x_max, y_min, y_max:
             tensor.requires_grad_()
+        input_image.requires_grad_(False)
 
-        # torch.autograd.gradcheck(
-        #     box_convolution_wrapper, (input_image, x_min, x_max, y_min, y_max),
-        #     eps=0.05, raise_exception=True)
+        try:
+            torch.autograd.gradcheck(
+                box_convolution_wrapper, (input_image, x_min, x_max, y_min, y_max),
+                eps=gradcheck_step, raise_exception=True)
+        except RuntimeError as error:
+            print('Test %d failed at finite difference grad check w.r.t. parameters.' % test_idx)
+            print('h, w = %d, %d' % (h, w))
+            print('x_min, x_max, y_min, y_max are:')
+            for parameter in x_min, x_max, y_min, y_max:
+                print(parameter)
+            raise
 
 if __name__ == '__main__':
     seed = int(time.time())
-    seed = 1546545756
+    seed = 1546545757
     torch.manual_seed(seed)
     random.seed(seed)
     print('Random seed is %d' % seed)
