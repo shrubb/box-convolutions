@@ -217,7 +217,7 @@ def test_box_convolution_module():
 
         for tensor in x_min, x_max, y_min, y_max:
             tensor.requires_grad_()
-        input_image.requires_grad_(False)
+        input_image.requires_grad_(False) # already tested
 
         try:
             torch.autograd.gradcheck(

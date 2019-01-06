@@ -179,7 +179,7 @@ std::vector<at::Tensor> box_convolution_backward(
                 cpu::boxConvAccGradParameters(
                     xMinInt , xMaxInt , yMinInt , yMaxInt ,
                     xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                    input_integrated, tmpArray, paramIdx);
+                    input_integrated, tmpArray, static_cast<Parameter>(paramIdx));
             }
 
             tmpArray.mul_(grad_output);

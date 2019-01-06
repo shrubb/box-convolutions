@@ -1,3 +1,5 @@
+enum class Parameter {xMin, xMax, yMin, yMax};
+
 namespace cpu {
 
 void splitParameters(
@@ -24,6 +26,6 @@ void boxConvUpdateGradInput(
 void boxConvAccGradParameters(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
-    at::Tensor & input_integrated, at::Tensor & tmpArray, int paramIdx);
+    at::Tensor & input_integrated, at::Tensor & tmpArray, Parameter parameter);
 
 }

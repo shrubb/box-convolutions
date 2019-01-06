@@ -1,5 +1,7 @@
 #include <torch/extension.h>
 
+enum class Parameter {xMin, xMax, yMin, yMax};
+
 namespace cpu {
 
 // Splits x_min, x_max, y_min, y_max into integer and fractional parts
@@ -402,7 +404,7 @@ void boxConvUpdateGradInput(
 void boxConvAccGradParameters(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
-    at::Tensor & input_integrated, at::Tensor & tmpArray, int paramIdx) {
+    at::Tensor & input_integrated, at::Tensor & tmpArray, Parameter parameter) {
 
     const int h = tmpArray.size(-2);
     const int w = tmpArray.size(-1);
@@ -445,47 +447,180 @@ void boxConvAccGradParameters(
                     for (int x = 1; x <= h; ++x) {
                         for (int y = 1; y <= w; ++y) {
 
-                            int valid;
-                            int cornerX, cornerY;
+                            if (parameter == Parameter::xMin) {
+                                // Had to move 3 following lines into the 
+                                // `if` to ensure loop unswitching
+                                int valid;
+                                int cornerX, cornerY;
+                                
+                                scalar_t delta = 0;
+                                
+                                // TODO maybe use `input` instead of `inputInt`
+                                valid =
+                                    not (y+yMinInt < 1) & not (y+yMinInt > w) & not (x+xMinInt < 1);
+                                cornerX = max(0,min(h-1,x+xMinInt-1));
+                                cornerY = max(0,min(w-1,y+yMinInt-1));
+                                const scalar_t tlCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                valid = 
+                                    not (y+yMaxInt < 0) & not (y+yMaxInt >= w) & not (x+xMinInt < 1);
+                                cornerX = max(0,min(h-1,x+xMinInt-1));
+                                cornerY = max(0,min(w-1,y+yMaxInt  ));
+                                const scalar_t trCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                delta += trCorner * yMaxFrac;
+                                delta += tlCorner * yMinFrac;
 
-                            // TODO maybe use `input` instead of `inputInt`
-                            valid =
-                                not (y+yMinInt < 1) & not (y+yMinInt > w) & not (x+xMinInt < 1);
-                            cornerX = max(0,min(h-1,x+xMinInt-1));
-                            cornerY = max(0,min(w-1,y+yMinInt-1));
-                            const scalar_t tlCorner = valid * 
-                                ( inputIntAcsr[cornerX+1][cornerY+1]
-                                - inputIntAcsr[cornerX  ][cornerY+1]
-                                - inputIntAcsr[cornerX+1][cornerY  ]
-                                + inputIntAcsr[cornerX  ][cornerY  ]);
-                            
-                            valid = 
-                                not (y+yMaxInt < 0) & not (y+yMaxInt >= w) & not (x+xMinInt < 1);
-                            cornerX = max(0,min(h-1,x+xMinInt-1));
-                            cornerY = max(0,min(w-1,y+yMaxInt  ));
-                            const scalar_t trCorner = valid * 
-                                ( inputIntAcsr[cornerX+1][cornerY+1]
-                                - inputIntAcsr[cornerX  ][cornerY+1]
-                                - inputIntAcsr[cornerX+1][cornerY  ]
-                                + inputIntAcsr[cornerX  ][cornerY  ]);
-                            
-                            scalar_t delta = 0;
+                                delta += inputIntAcsr
+                                    [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt  , w))];
+                                delta -= inputIntAcsr
+                                    [max(0,min(x+xMinInt-1, h))][max(0,min(y+yMaxInt  , w))];
+                                delta -= inputIntAcsr
+                                    [max(0,min(x+xMinInt  , h))][max(0,min(y+yMinInt  , w))];
+                                delta += inputIntAcsr
+                                    [max(0,min(x+xMinInt-1, h))][max(0,min(y+yMinInt  , w))];
 
-                            delta += trCorner * yMaxFrac;
-                            delta += tlCorner * yMinFrac;
+                                delta *= (x+xMinInt >= 1) & (x+xMinInt <= h);
 
-                            delta += inputIntAcsr
-                                [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt  , w))];
-                            delta -= inputIntAcsr
-                                [max(0,min(x+xMinInt-1, h))][max(0,min(y+yMaxInt  , w))];
-                            delta -= inputIntAcsr
-                                [max(0,min(x+xMinInt  , h))][max(0,min(y+yMinInt  , w))];
-                            delta += inputIntAcsr
-                                [max(0,min(x+xMinInt-1, h))][max(0,min(y+yMinInt  , w))];
+                                *(tmpArrayData++) = -delta;
+                            }
 
-                            delta *= (x+xMinInt >= 1) & (x+xMinInt <= h);
-                            
-                            *(tmpArrayData++) = -delta;
+                            else if (parameter == Parameter::xMax) {
+                                int valid;
+                                int cornerX, cornerY;
+                                
+                                scalar_t delta = 0;
+
+                                valid =
+                                    not (y+yMinInt < 1) & not (y+yMinInt > w) & not (x+xMaxInt >= h);
+                                cornerX = max(0,min(h-1,x+xMaxInt  ));
+                                cornerY = max(0,min(w-1,y+yMinInt-1));
+                                const scalar_t blCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                valid = 
+                                    not (y+yMaxInt < 0) & not (y+yMaxInt >= w) & not (x+xMaxInt >= h);
+                                cornerX = max(0,min(h-1,x+xMaxInt  ));
+                                cornerY = max(0,min(w-1,y+yMaxInt  ));
+                                const scalar_t brCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                delta += brCorner * yMaxFrac;
+                                delta += blCorner * yMinFrac;
+
+                                delta += inputIntAcsr
+                                    [max(0,min(x+xMaxInt+1, h))][max(0,min(y+yMaxInt  , w))];
+                                delta -= inputIntAcsr
+                                    [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMaxInt  , w))];
+                                delta -= inputIntAcsr
+                                    [max(0,min(x+xMaxInt+1, h))][max(0,min(y+yMinInt  , w))];
+                                delta += inputIntAcsr
+                                    [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMinInt  , w))];
+
+                                delta *= (x+xMaxInt >= 0) & (x+xMaxInt < h);
+
+                                *(tmpArrayData++) = delta;
+                            }
+
+                            else if (parameter == Parameter::yMin) {
+                                int valid;
+                                int cornerX, cornerY;
+                                
+                                scalar_t delta = 0;
+
+                                valid =
+                                    not (y+yMinInt < 1) & not (x+xMinInt < 1) & not (x+xMinInt > h);
+                                cornerX = max(0,min(h-1,x+xMinInt-1));
+                                cornerY = max(0,min(w-1,y+yMinInt-1));
+                                const scalar_t tlCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                valid = 
+                                    not (y+yMinInt < 1) & not (x+xMaxInt < 0) & not (x+xMaxInt >= h);
+                                cornerX = max(0,min(h-1,x+xMaxInt  ));
+                                cornerY = max(0,min(w-1,y+yMinInt-1));
+                                const scalar_t blCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                delta += tlCorner * xMinFrac;
+                                delta += blCorner * xMaxFrac;
+
+                                delta += inputIntAcsr
+                                    [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMinInt  , w))];
+                                delta -=inputIntAcsr
+                                    [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMinInt-1, w))];
+                                delta -=inputIntAcsr
+                                    [max(0,min(x+xMinInt  , h))][max(0,min(y+yMinInt  , w))];
+                                delta +=inputIntAcsr
+                                    [max(0,min(x+xMinInt  , h))][max(0,min(y+yMinInt-1, w))];
+
+                                delta *= (y+yMinInt >= 1) & (y+yMinInt <= w);
+
+                                *(tmpArrayData++) = -delta;
+                            }
+
+                            else if (parameter == Parameter::yMax) {
+                                int valid;
+                                int cornerX, cornerY;
+                                
+                                scalar_t delta = 0;
+
+                                valid =
+                                    not (y+yMaxInt >= w) & not (x+xMinInt < 1) & not (x+xMinInt > h);
+                                cornerX = max(0,min(h-1,x+xMinInt-1));
+                                cornerY = max(0,min(w-1,y+yMaxInt  ));
+                                const scalar_t trCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                valid = 
+                                    not (y+yMaxInt >= w) & not (x+xMaxInt < 0) & not (x+xMaxInt >= h);
+                                cornerX = max(0,min(h-1,x+xMaxInt  ));
+                                cornerY = max(0,min(w-1,y+yMaxInt  ));
+                                const scalar_t brCorner = valid * 
+                                    ( inputIntAcsr[cornerX+1][cornerY+1]
+                                    - inputIntAcsr[cornerX  ][cornerY+1]
+                                    - inputIntAcsr[cornerX+1][cornerY  ]
+                                    + inputIntAcsr[cornerX  ][cornerY  ]);
+                                
+                                delta += trCorner * xMinFrac;
+                                delta += brCorner * xMaxFrac;
+
+                                delta += inputIntAcsr
+                                    [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMaxInt+1, w))];
+                                delta -=inputIntAcsr
+                                    [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMaxInt  , w))];
+                                delta -=inputIntAcsr
+                                    [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt+1, w))];
+                                delta +=inputIntAcsr
+                                    [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt  , w))];
+
+                                delta *= (y+yMaxInt >= 0) & (y+yMaxInt < w);
+
+                                *(tmpArrayData++) = delta;
+                            }
                         }
                     }
                 } // filterIdx
