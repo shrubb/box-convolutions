@@ -78,9 +78,10 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor x_min, at::Tensor x_max,
     at::Tensor y_min, at::Tensor y_max,
     at::Tensor grad_output,
-    bool input_needs_grad,
-    bool x_min_needs_grad, bool x_max_needs_grad,
-    bool y_min_needs_grad, bool y_max_needs_grad) {
+    const bool input_needs_grad,
+    const bool x_min_needs_grad, const bool x_max_needs_grad,
+    const bool y_min_needs_grad, const bool y_max_needs_grad,
+    const float max_input_h, const float max_input_w) {
 
     CHECK_CONTIGUOUS(grad_output);
     AT_CHECK(grad_output.dim() == 4, "grad_output for box_convolution must have 4 dimensions")
@@ -173,21 +174,45 @@ std::vector<at::Tensor> box_convolution_backward(
 
     for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
         if (paramNeedsGrad[paramIdx]) {
+            const Parameter paramId = static_cast<Parameter>(paramIdx);
+
             if (input_integrated.is_cuda()) {
                 THError("NYI: gpu::boxConvAccGradParameters");
             } else {
                 cpu::boxConvAccGradParameters(
                     xMinInt , xMaxInt , yMinInt , yMaxInt ,
                     xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                    input_integrated, tmpArray, static_cast<Parameter>(paramIdx));
+                    input_integrated, tmpArray, paramId);
             }
 
             tmpArray.mul_(grad_output);
 
             gradParam[paramIdx] = 
                 tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum({0, 3});
+
+            const double scale = paramId == Parameter::xMin or paramId == Parameter::xMax
+                                 ? max_input_h : max_input_w;
+            gradParam[paramIdx].mul_(scale);
         }
     }
 
     return {gradInput, gradParam[0], gradParam[1], gradParam[2], gradParam[3]};
+}
+
+void clip_parameters(
+    at::Tensor x_min, at::Tensor x_max,
+    at::Tensor y_min, at::Tensor y_max,
+    const float max_input_h, const float max_input_w, const bool exact) {
+
+    CHECK_CONTIGUOUS(x_min); // and assume other parameter tensors have same layout
+
+    const float minWidth  = exact ? 1.001f : 2.001f;
+    const float minHeight = exact ? 1.001f : 2.001f;
+
+    if (x_min.is_cuda()) {
+        THError("NYI: gpu::clip_parameters");
+    } else {
+        cpu::clipParameters(x_min, x_max, minHeight, max_input_h);
+        cpu::clipParameters(y_min, y_max, minWidth , max_input_w);
+    }
 }

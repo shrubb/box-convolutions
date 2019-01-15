@@ -1,5 +1,8 @@
 #include <torch/extension.h>
 
+using std::min;
+using std::max;
+
 enum class Parameter {xMin, xMax, yMin, yMax};
 
 namespace cpu {
@@ -71,8 +74,6 @@ void boxConvUpdateOutput(
     const int w = output.size(-1);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "boxConvUpdateOutputCPU", ([&] {
-        using std::min;
-        using std::max;
 
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
@@ -248,9 +249,6 @@ void boxConvUpdateGradInput(
         }
 
         // Actually fill gradInput
-        using std::min;
-        using std::max;
-
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
         auto yMinIntAcsr = yMinInt.accessor<int, 2>();
@@ -410,9 +408,7 @@ void boxConvAccGradParameters(
     const int w = tmpArray.size(-1);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "cpu::boxConvAccGradParameters", ([&] {
-        using std::min;
-        using std::max;
-
+        
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
         auto yMinIntAcsr = yMinInt.accessor<int, 2>();
@@ -628,6 +624,38 @@ void boxConvAccGradParameters(
         } // batchIdx
     }));
 
+}
+
+void clipParameters(
+    at::Tensor paramMin, at::Tensor paramMax,
+    const float minSizeFloat, const float maxSizeFloat) {
+
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.type(), "cpu::clipParameters", ([&] {
+
+        scalar_t *paramMinPtr = paramMin.data<scalar_t>();
+        scalar_t *paramMaxPtr = paramMax.data<scalar_t>();
+
+        const scalar_t minSize = static_cast<scalar_t>(minSizeFloat);
+        const scalar_t maxSize = static_cast<scalar_t>(maxSizeFloat);
+
+        for (int idx = 0; idx < paramMin.numel(); ++idx) {
+            scalar_t minValue, maxValue;
+
+                                                 /* inverse reparametrize on the fly */
+            minValue = max(-maxSize+1, min(maxSize-1, paramMinPtr[idx] * maxSize));
+            maxValue = max(-maxSize+1, min(maxSize-1, paramMaxPtr[idx] * maxSize));
+
+            if (minValue + minSize - 0.9999 > maxValue) {
+                const scalar_t mean = 0.5 * (minValue + maxValue);
+                minValue = mean - 0.5 * (minSize - 0.9999);
+                maxValue = mean + 0.5 * (minSize - 0.9999);
+            }
+
+                            /* reparametrize back */
+            paramMinPtr[idx] = minValue / maxSize;
+            paramMaxPtr[idx] = maxValue / maxSize;
+        }
+    }));
 }
 
 } // namespace cpu

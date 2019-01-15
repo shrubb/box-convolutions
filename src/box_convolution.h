@@ -28,4 +28,8 @@ void boxConvAccGradParameters(
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & input_integrated, at::Tensor & tmpArray, Parameter parameter);
 
+void clipParameters(
+    at::Tensor paramMin, at::Tensor paramMax,
+    const float minSizeFloat, const float maxSizeFloat);
+
 }
