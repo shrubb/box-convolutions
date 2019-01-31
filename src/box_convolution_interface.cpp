@@ -11,7 +11,7 @@ at::Tensor integral_image(at::Tensor input);
 at::Tensor box_convolution_forward(
     at::Tensor input_integrated,
     at::Tensor x_min, at::Tensor x_max,
-    at::Tensor y_min, at::Tensor y_max) {
+    at::Tensor y_min, at::Tensor y_max, const bool normalize) {
 
     CHECK_CONTIGUOUS(input_integrated);
     AT_CHECK(input_integrated.dim() == 4, "box conv input must have 4 dimensions");
@@ -40,13 +40,24 @@ at::Tensor box_convolution_forward(
     auto yMinFrac = at::empty(x_min.sizes(), fracOptions);
     auto yMaxFrac = at::empty(x_min.sizes(), fracOptions);
 
+    // inverse box areas for normalization
+    at::Tensor area;
+
     if (x_min.is_cuda()) {
         THError("NYI: gpu::splitParameters");
+
+        if (normalize) {
+            THError("NYI: gpu::computeArea");
+        }
     } else {
         cpu::splitParameters(
             x_min   , x_max   , y_min   , y_max   ,
             xMinInt , xMaxInt , yMinInt , yMaxInt ,
             xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
+
+        if (normalize) {
+            area = cpu::computeArea(x_min, x_max, y_min, y_max);
+        }
     }
 
     const int batchSize = input_integrated.size(0);
@@ -64,10 +75,17 @@ at::Tensor box_convolution_forward(
     if (input_integrated.is_cuda()) {
         THError("NYI: gpu::boxConvUpdateOutput");
     } else {
-        cpu::boxConvUpdateOutput(
-            xMinInt , xMaxInt , yMinInt , yMaxInt ,
-            xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-            input_integrated, output);
+        if (normalize) {
+            cpu::boxConvUpdateOutput<true>(
+                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                area, input_integrated, output);
+        } else {
+            cpu::boxConvUpdateOutput<false>(
+                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                area, input_integrated, output);
+        }
     }
 
     return output.reshape({batchSize, nInputPlanes * numFilters, h, w});
@@ -77,11 +95,11 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor input_integrated,
     at::Tensor x_min, at::Tensor x_max,
     at::Tensor y_min, at::Tensor y_max,
-    at::Tensor grad_output,
+    at::Tensor grad_output, at::Tensor output,
+    const float max_input_h, const float max_input_w, const bool normalize,
     const bool input_needs_grad,
     const bool x_min_needs_grad, const bool x_max_needs_grad,
-    const bool y_min_needs_grad, const bool y_max_needs_grad,
-    const float max_input_h, const float max_input_w) {
+    const bool y_min_needs_grad, const bool y_max_needs_grad) {
 
     CHECK_CONTIGUOUS(grad_output);
     AT_CHECK(grad_output.dim() == 4, "grad_output for box_convolution must have 4 dimensions")
@@ -129,6 +147,7 @@ std::vector<at::Tensor> box_convolution_backward(
     auto yMinFrac = at::empty(x_min.sizes(), fracOptions);
     auto yMaxFrac = at::empty(x_min.sizes(), fracOptions);
 
+
     if (input_needs_grad) {
         at::Tensor grad_output_integrated = integral_image(grad_output);
 
@@ -136,14 +155,30 @@ std::vector<at::Tensor> box_convolution_backward(
             {batchSize, nInputPlanes, numFilters, h, w}, grad_output.options());
         CHECK_CONTIGUOUS(tmpArray);
 
+        at::Tensor area; // box area for normalization
+
         if (gradInput.is_cuda()) {
+            if (normalize) {
+                THError("NYI: gpu::computeArea");
+            }
+
             THError("NYI: gpu::boxConvUpdateGradInput");
         } else {
-            cpu::boxConvUpdateGradInput(
-                x_min, x_max, y_min, y_max,
-                xMinInt , xMaxInt , yMinInt , yMaxInt ,
-                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                grad_output_integrated, tmpArray);
+            if (normalize) {
+                area = cpu::computeArea(x_min, x_max, y_min, y_max);
+
+                cpu::boxConvUpdateGradInput<true>(
+                    x_min, x_max, y_min, y_max,
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, grad_output_integrated, tmpArray);
+            } else {
+                cpu::boxConvUpdateGradInput<false>(
+                    x_min, x_max, y_min, y_max,
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, grad_output_integrated, tmpArray);
+            }
         }
 
         gradInput = tmpArray.sum(2);
@@ -153,6 +188,7 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor gradParam[4] = {nullTensor, nullTensor, nullTensor, nullTensor};
 
     at::Tensor tmpArray;
+    at::Tensor area; // box area for normalization
     
     bool someParamNeedsGrad = false;
     for (bool needsGrad : paramNeedsGrad) {
@@ -164,37 +200,81 @@ std::vector<at::Tensor> box_convolution_backward(
 
         if (x_min.is_cuda()) {
             THError("NYI: gpu::splitParameters");
+
+            if (normalize) {
+                THError("NYI: gpu::computeArea");
+            }
         } else {
             cpu::splitParametersAccGradParameters(
                 x_min   , x_max   , y_min   , y_max   ,
                 xMinInt , xMaxInt , yMinInt , yMaxInt ,
                 xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
-        }
-    }
 
-    for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
-        if (paramNeedsGrad[paramIdx]) {
-            const Parameter paramId = static_cast<Parameter>(paramIdx);
-
-            if (input_integrated.is_cuda()) {
-                THError("NYI: gpu::boxConvAccGradParameters");
-            } else {
-                cpu::boxConvAccGradParameters(
-                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
-                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                    input_integrated, tmpArray, paramId);
+            if (normalize) {
+                area = cpu::computeArea(x_min, x_max, y_min, y_max);
             }
-
-            tmpArray.mul_(grad_output);
-
-            gradParam[paramIdx] = 
-                tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum({0, 3});
-
-            const double scale = paramId == Parameter::xMin or paramId == Parameter::xMax
-                                 ? max_input_h : max_input_w;
-            gradParam[paramIdx].mul_(scale);
         }
-    }
+
+        for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
+            if (paramNeedsGrad[paramIdx]) {
+                const Parameter paramId = static_cast<Parameter>(paramIdx);
+
+                if (input_integrated.is_cuda()) {
+                    THError("NYI: gpu::boxConvAccGradParameters");
+                } else {cpu::boxConvAccGradParameters(
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        input_integrated, tmpArray, paramId);
+                }
+
+                tmpArray.mul_(grad_output);
+
+                gradParam[paramIdx] = 
+                    tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum({0, 3});
+
+                if (normalize) {
+                    gradParam[paramIdx].mul_(area);
+                }
+            }
+        }
+
+        if (normalize) { // add the second summand
+            output = output.reshape({batchSize, nInputPlanes, numFilters, h, w});
+            
+            tmpArray = grad_output.mul(output);
+            tmpArray = tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum({0, 3});
+
+            for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
+                if (paramNeedsGrad[paramIdx]) {
+                    const Parameter paramId = static_cast<Parameter>(paramIdx);
+
+                    // multiply by area derivative and divide by area
+                    const bool needXDeriv = paramId == Parameter::xMin or paramId == Parameter::xMax;
+                    const bool needYDeriv = not needXDeriv;
+
+                    if (x_min.is_cuda()) {
+                        THError("NYI: gpu::computeArea");
+                    } else {
+                        area = cpu::computeArea(x_min, x_max, y_min, y_max, needXDeriv, needYDeriv);
+                    }
+
+                    const bool minus = paramId == Parameter::xMax or paramId == Parameter::yMax;
+                    gradParam[paramIdx].addcmul_(tmpArray, area, minus ? -1.0 : 1.0);
+                }
+            }
+        }
+
+        // account for reparametrization
+        for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
+            if (paramNeedsGrad[paramIdx]) {
+                const Parameter paramId = static_cast<Parameter>(paramIdx);
+                const double scale = paramId == Parameter::xMin or paramId == Parameter::xMax
+                                     ? max_input_h : max_input_w;
+
+                gradParam[paramIdx].mul_(scale);
+            }
+        }
+    } // if (someParamNeedsGrad)
 
     return {gradInput, gradParam[0], gradParam[1], gradParam[2], gradParam[3]};
 }

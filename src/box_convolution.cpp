@@ -65,10 +65,11 @@ void splitParametersAccGradParameters(
     }));
 }
 
+template <bool normalize>
 void boxConvUpdateOutput(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
-    at::Tensor & input_integrated, at::Tensor & output) {
+    at::Tensor & area, at::Tensor & input_integrated, at::Tensor & output) {
 
     const int h = output.size(-2);
     const int w = output.size(-1);
@@ -84,6 +85,12 @@ void boxConvUpdateOutput(
         auto xMaxFracAcsr = xMaxFrac.accessor<scalar_t, 2>();
         auto yMinFracAcsr = yMinFrac.accessor<scalar_t, 2>();
         auto yMaxFracAcsr = yMaxFrac.accessor<scalar_t, 2>();
+
+        auto areaAcsr = xMinFracAcsr; // because there's no default ctor :(
+        // only initialize the accessor if `area` is defined (errors otherwise)
+        if (normalize) {
+            areaAcsr = area.accessor<scalar_t, 2>();
+        }
 
         scalar_t *outputData = output.data<scalar_t>();
         
@@ -206,7 +213,10 @@ void boxConvUpdateOutput(
                                     + inputIntAcsr[t-1][l-1]);
                             }
 
-                            *(outputData++) = outValue;
+                            *(outputData++) = outValue * 
+                                (normalize ? 
+                                    areaAcsr[inPlaneIdx][filterIdx] : 
+                                    static_cast<scalar_t>(1));
                         }
                     }
                 } // filterIdx
@@ -215,13 +225,26 @@ void boxConvUpdateOutput(
     }));
 }
 
+// explicitly instantiate
+template void boxConvUpdateOutput<true>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
+template void boxConvUpdateOutput<false>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
+
 // `grad_output_integrated` size: {batchSize, nInputPlanes, numFilters, h+1, w+1}
 // `tmpArray` size: {batchSize, nInputPlanes, numFilters, h, w}
+template <bool normalize>
 void boxConvUpdateGradInput(
     at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
-    at::Tensor & grad_output_integrated, at::Tensor & tmpArray) {
+    at::Tensor & area, at::Tensor & grad_output_integrated, at::Tensor & tmpArray) {
 
     const int h = tmpArray.size(-2);
     const int w = tmpArray.size(-1);
@@ -258,6 +281,12 @@ void boxConvUpdateGradInput(
         auto xMaxFracAcsr = xMaxFrac.accessor<scalar_t, 2>();
         auto yMinFracAcsr = yMinFrac.accessor<scalar_t, 2>();
         auto yMaxFracAcsr = yMaxFrac.accessor<scalar_t, 2>();
+
+        auto areaAcsr = xMinFracAcsr; // because there's no default ctor :(
+        // only initialize the accessor if `area` is defined (errors otherwise)
+        if (normalize) {
+            areaAcsr = area.accessor<scalar_t, 2>();
+        }
 
         scalar_t *tmpArrayData = tmpArray.data<scalar_t>();
 
@@ -389,7 +418,10 @@ void boxConvUpdateGradInput(
                                     - gradOutputAcsr[tAdv  ][lAdv+1]
                                     + gradOutputAcsr[tAdv  ][lAdv  ]));
 
-                            *(tmpArrayData++) = outValue;
+                            *(tmpArrayData++) = outValue *
+                                (normalize ? 
+                                    areaAcsr[inPlaneIdx][filterIdx] : 
+                                    static_cast<scalar_t>(1));
                         }
                     }
                 } // filterIdx
@@ -397,6 +429,20 @@ void boxConvUpdateGradInput(
         } // batchIdx
     }));
 }
+
+// explicitly instantiate
+template void boxConvUpdateGradInput<true>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
+template void boxConvUpdateGradInput<false>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
 
 // tmpArray size: {batchSize, nInputPlanes, numFilters, h, w}
 void boxConvAccGradParameters(
@@ -563,11 +609,11 @@ void boxConvAccGradParameters(
 
                                 delta += inputIntAcsr
                                     [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMinInt  , w))];
-                                delta -=inputIntAcsr
+                                delta -= inputIntAcsr
                                     [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMinInt-1, w))];
-                                delta -=inputIntAcsr
+                                delta -= inputIntAcsr
                                     [max(0,min(x+xMinInt  , h))][max(0,min(y+yMinInt  , w))];
-                                delta +=inputIntAcsr
+                                delta += inputIntAcsr
                                     [max(0,min(x+xMinInt  , h))][max(0,min(y+yMinInt-1, w))];
 
                                 delta *= (y+yMinInt >= 1) & (y+yMinInt <= w);
@@ -606,11 +652,11 @@ void boxConvAccGradParameters(
 
                                 delta += inputIntAcsr
                                     [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMaxInt+1, w))];
-                                delta -=inputIntAcsr
+                                delta -= inputIntAcsr
                                     [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMaxInt  , w))];
-                                delta -=inputIntAcsr
+                                delta -= inputIntAcsr
                                     [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt+1, w))];
-                                delta +=inputIntAcsr
+                                delta += inputIntAcsr
                                     [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt  , w))];
 
                                 delta *= (y+yMaxInt >= 0) & (y+yMaxInt < w);
@@ -629,6 +675,7 @@ void boxConvAccGradParameters(
 void clipParameters(
     at::Tensor paramMin, at::Tensor paramMax,
     const float minSizeFloat, const float maxSizeFloat) {
+    // TODO do this in double precision
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.type(), "cpu::clipParameters", ([&] {
 
@@ -656,6 +703,28 @@ void clipParameters(
             paramMaxPtr[idx] = maxValue / maxSize;
         }
     }));
+}
+
+at::Tensor computeArea(
+    at::Tensor x_min, at::Tensor x_max, at::Tensor y_min, at::Tensor y_max,
+    const bool needXDeriv = true, const bool needYDeriv = true) {
+
+    // TODO: how to stop tracking operations? `.is_variable_(false)` doesn't work
+    auto retval = at::ones_like(x_min);
+
+    if (needXDeriv) {
+        auto xArea = x_max - x_min;
+        xArea += 1;
+        retval *= xArea;
+    }
+    if (needYDeriv) {
+        auto yArea = y_max - y_min;
+        yArea += 1;
+        retval *= yArea;
+    }
+
+    retval.reciprocal_(); // inverse areas
+    return retval;
 }
 
 } // namespace cpu

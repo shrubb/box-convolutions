@@ -6,17 +6,17 @@ at::Tensor integral_image(
 at::Tensor box_convolution_forward(
     at::Tensor input_integrated,
     at::Tensor x_min, at::Tensor x_max,
-    at::Tensor y_min, at::Tensor y_max);
+    at::Tensor y_min, at::Tensor y_max, const bool normalize);
 
 std::vector<at::Tensor> box_convolution_backward(
     at::Tensor input_integrated,
     at::Tensor x_min, at::Tensor x_max,
     at::Tensor y_min, at::Tensor y_max,
-    at::Tensor grad_output,
+    at::Tensor grad_output, at::Tensor output,
+    const float max_input_h, const float max_input_w, const bool normalize,
     const bool input_needs_grad,
     const bool x_min_needs_grad, const bool x_max_needs_grad,
-    const bool y_min_needs_grad, const bool y_max_needs_grad,
-    const float max_input_h, const float max_input_w);
+    const bool y_min_needs_grad, const bool y_max_needs_grad);
 
 void clip_parameters(
     at::Tensor x_min, at::Tensor x_max,

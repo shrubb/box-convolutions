@@ -5,12 +5,16 @@ from .box_convolution_function import BoxConvolutionFunction, reparametrize
 import box_convolution_cpp_cuda as cpp_cuda
 
 class BoxConv2d(torch.nn.Module):
-    def __init__(self, in_planes, num_filters, max_input_h, max_input_w, stride_h=1, stride_w=1):
+    def __init__(self,
+        in_planes, num_filters, max_input_h, max_input_w,
+        stride_h=1, stride_w=1, normalize=True):
+
         super(BoxConv2d, self).__init__()
         self.in_planes = in_planes
         self.num_filters = num_filters
         self.max_input_h, self.max_input_w = max_input_h, max_input_w
         self.stride_h, self.stride_w = stride_h, stride_w
+        self.normalize = normalize
         self.exact = True
 
         self.x_min, self.x_max, self.y_min, self.y_max = \
@@ -117,7 +121,7 @@ class BoxConv2d(torch.nn.Module):
         """
         return reparametrize(
             self.x_min, self.x_max, self.y_min, self.y_max,
-            self.max_input_h, self.max_input_w, inverse=True)
+            self.max_input_h, self.max_input_w, inplace=False, inverse=True)
 
     def _clip_parameters(self):
         """
@@ -142,4 +146,4 @@ class BoxConv2d(torch.nn.Module):
 
         return BoxConvolutionFunction.apply(
             input, self.x_min, self.x_max, self.y_min, self.y_max,
-            self.max_input_h, self.max_input_w)
+            self.max_input_h, self.max_input_w, self.normalize)

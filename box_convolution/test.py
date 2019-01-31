@@ -37,7 +37,7 @@ def test_integral_image():
     from box_convolution_cpp_cuda import integral_image
 
     # check IntegralImageFunction vs reference implementation
-    for test_idx in tqdm(range(30)):
+    for test_idx in tqdm(range(50)):
         batch_size = random.randint(1, 3)
         in_planes = random.randint(1, 3)
         stride_h, stride_w = 1, 1 # may change in the future
@@ -56,9 +56,7 @@ def test_integral_image():
                     % (test_idx, input_image, our_result, reference_result))
 
 def test_box_convolution_module():
-    gradcheck_step = 1e-4
-
-    def explicit_box_kernel(x_min, x_max, y_min, y_max, normalize=False):
+    def explicit_box_kernel(x_min, x_max, y_min, y_max, normalize):
         import math
         h_farthest = math.ceil(max(x_max, -x_min))
         w_farthest = math.ceil(max(y_max, -y_min))
@@ -88,12 +86,13 @@ def test_box_convolution_module():
 
     # reference implementation
     def box_convolution_reference(
-        input, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize=False):
+        input, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize):
         assert x_min.shape == x_max.shape
         assert x_min.shape == y_min.shape
         assert x_min.shape == y_max.shape
 
         assert input.ndimension() == 4
+        assert type(normalize) is bool
 
         x_min, x_max, y_min, y_max = \
             reparametrize(x_min, x_max, y_min, y_max, max_input_h, max_input_w, inverse=True)
@@ -101,6 +100,7 @@ def test_box_convolution_module():
         in_planes, num_filters = x_min.shape
         assert input.shape[1] == in_planes
 
+        # in_c, out_c = input channel, output channel
         kernels = [[explicit_box_kernel(*out_c, normalize) for out_c in zip(*in_c)] \
             for in_c in zip(x_min, x_max, y_min, y_max)]
         assert len(kernels) == in_planes
@@ -131,13 +131,14 @@ def test_box_convolution_module():
 
     # same interface for our target function
     def box_convolution_wrapper(
-        input, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize=False):
+        input, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize):
 
         assert x_min.shape == x_max.shape
         assert x_min.shape == y_min.shape
         assert x_min.shape == y_max.shape
 
         assert input.ndimension() == 4
+        assert type(normalize) is bool
 
         in_planes, num_filters = x_min.shape
         assert input.shape[1] == in_planes
@@ -147,15 +148,35 @@ def test_box_convolution_module():
         del module.x_max; module.x_max = x_max
         del module.y_min; module.y_min = y_min
         del module.y_max; module.y_max = y_max
+        module.normalize = normalize
 
-        return module(input)
+        params_before = module.get_actual_parameters()
+        
+        output = module(input)
+        
+        params_after = module.get_actual_parameters()
+        param_names = 'x_min', 'x_max', 'y_min', 'y_max'
+        for p_before, p_after, p_name in zip(params_before, params_after, param_names):
+            if not torch.equal(p_before, p_after):
+                raise ValueError(
+                    'Wrong test case configuration: `_clip_parameters` '
+                    'has changed one of the parameters.\n\n' + \
+                    'h, w = %d, %d\n\n' % (h, w) + \
+                    'Before:\n' + \
+                    '\n'.join('%s: %s' % (n,p) for n,p in zip(param_names, params_before)) + \
+                    '\n\nAfter:\n' + \
+                    '\n'.join('%s: %s' % (n,p) for n,p in zip(param_names, params_after)))
 
-    for test_idx in tqdm(range(30)):
+        return output
+
+    for test_idx in tqdm(range(35)):
         batch_size = random.randint(1, 3)
         in_planes = random.randint(1, 3)
         num_filters = random.randint(1, 3)
         stride_h, stride_w = 1, 1 # may change in the future
         h, w = random.randint(1+stride_h, 10), random.randint(1+stride_w, 10)
+        max_input_h, max_input_w = h+1, w+1
+        gradcheck_step = 0.004
         # exact = random.random() < 0.8
 
         input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True)
@@ -167,11 +188,11 @@ def test_box_convolution_module():
                 
                 box_is_valid = False
                 while not box_is_valid:
-                    # set width to at least 0.0001 because of `_clip_parameters`'s behavior
-                    x_min_curr = random.uniform(-h+2.1, h-1.1)
-                    y_min_curr = random.uniform(-w+2.1, w-1.1)
-                    x_max_curr = random.uniform(x_min_curr+0.0001, h-1.1)
-                    y_max_curr = random.uniform(y_min_curr+0.0001, w-1.1)
+                    # set sizes to at least 1.001 because of `_clip_parameters`'s behavior
+                    x_min_curr = random.uniform(-h+1.05, h-1.1)
+                    y_min_curr = random.uniform(-w+1.05, w-1.1)
+                    x_max_curr = random.uniform(x_min_curr+3*gradcheck_step+0.001, h-1.05)
+                    y_max_curr = random.uniform(y_min_curr+3*gradcheck_step+0.001, w-1.05)
 
                     # As a function of box coordinates (x_min etc.), box convolution isn't smooth
                     # at integer points, so the finite difference gradcheck will fail.
@@ -179,7 +200,7 @@ def test_box_convolution_module():
                     # enough from integers.
                     box_is_valid = True
                     for value in x_min_curr, y_min_curr, x_max_curr, y_max_curr:
-                        if abs(value - round(value)) <= gradcheck_step:
+                        if abs(value - round(value)) <= gradcheck_step * 3: # *3 for extra safety
                             box_is_valid = False
 
                 x_min[plane_idx, filter_idx] = x_min_curr
@@ -188,37 +209,42 @@ def test_box_convolution_module():
                 y_max[plane_idx, filter_idx] = y_max_curr
 
         # reparametrize
-        x_min, x_max, y_min, y_max = reparametrize(x_min, x_max, y_min, y_max, h+1, w+1)
+        x_min, x_max, y_min, y_max = \
+            reparametrize(x_min, x_max, y_min, y_max, max_input_h, max_input_w)
+
+        # randomly test either sum filter or average filter
+        normalize = random.choice((False, True))
 
         grad_output = \
             (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(input_image.dtype)
 
         # check output and grad w.r.t. input vs reference ones
         reference_result = box_convolution_reference(
-            input_image, x_min, x_max, y_min, y_max, h+1, w+1)
+            input_image, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize)
         reference_result.backward(grad_output)
         reference_grad_input = input_image.grad.clone()
         input_image.grad.zero_()
 
         our_result = box_convolution_wrapper(
-            input_image, x_min, x_max, y_min, y_max, h+1, w+1)
+            input_image, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize)
         our_result.backward(grad_output)
         our_grad_input = input_image.grad.clone()
         
         if not our_result.allclose(reference_result, rtol=3e-5, atol=1e-5):
             raise ValueError(
-                'Test %d failed at forward pass.\n\nInput:\n%s\n\n'
+                'Test %d failed at forward pass.\n\nNormalize: %s\n\nInput:\n%s\n\n'
                 'Our output:\n%s\n\nReference output:\n%s\n\nMax diff: %f\n\n'
-                    % (test_idx, input_image, our_result, reference_result, \
+                    % (test_idx, normalize, input_image, our_result, reference_result, \
                        (our_result - reference_result).abs().max()))
 
         if not our_grad_input.allclose(reference_grad_input, rtol=3e-5, atol=1e-5):
             raise ValueError(
-                'Test %d failed at backward pass.\n\nInput:\n%s\n\nOutput:\n%s\n\n'
-                'gradOutput:\n%s\n\nOur gradInput:\n%s\n\n'
+                'Test %d failed at backward pass.\n\nNormalize: %s\n\n'
+                'Input:\n%s\n\nOutput:\n%s\n\ngradOutput:\n%s\n\nOur gradInput:\n%s\n\n'
                 'Reference gradInput:\n%s\n\nMax diff: %f\n\n'
-                    % (test_idx, input_image, our_result, grad_output, our_grad_input, \
-                       reference_grad_input, (our_grad_input-reference_grad_input).abs().max()))
+                    % (test_idx, normalize, input_image, our_result, \
+                       grad_output, our_grad_input, reference_grad_input, \
+                       (our_grad_input-reference_grad_input).abs().max()))
 
         # convert to double and check our grads w.r.t. parameters against finite differences
         with torch.no_grad():
@@ -233,14 +259,18 @@ def test_box_convolution_module():
         input_image.requires_grad_(False) # already tested above
 
         try:
+            original_parameters = reparametrize(x_min, x_max, y_min, y_max, h+1, w+1, inverse=True)
+
             torch.autograd.gradcheck(
-                box_convolution_wrapper, (input_image, x_min, x_max, y_min, y_max, h+1, w+1),
-                eps=gradcheck_step, raise_exception=True)
-        except RuntimeError as error:
+                box_convolution_wrapper,
+                (input_image, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize),
+                eps=gradcheck_step / max(max_input_h, max_input_w), raise_exception=True)
+        except Exception:
             print('Test %d failed at finite difference grad check w.r.t. parameters.' % test_idx)
+            print('Normalize: %s' % normalize)
             print('h, w = %d, %d' % (h, w))
             print('x_min, x_max, y_min, y_max are:')
-            for parameter in x_min, x_max, y_min, y_max:
+            for parameter in original_parameters:
                 print(parameter)
             raise
 
