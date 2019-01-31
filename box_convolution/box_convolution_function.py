@@ -3,7 +3,8 @@ import torch
 import box_convolution_cpp_cuda as cpp_cuda
 
 def reparametrize(
-    x_min, x_max, y_min, y_max, max_input_h, max_input_w, inplace=False, inverse=False):
+    x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w,
+    inplace=False, inverse=False):
     """
         If `inverse is False`, scale module's parameters so that their range becomes
         approximately [-1; 1]. Otherwise, do the inverse operation.
@@ -13,8 +14,8 @@ def reparametrize(
 
         If `not inplace`, returns 4 new tensors, otherwise modifies the given ones.
     """
-    scalar_h = max_input_h if inverse else (1 / max_input_h)
-    scalar_w = max_input_w if inverse else (1 / max_input_w)
+    scalar_h = reparametrization_h if inverse else (1 / reparametrization_h)
+    scalar_w = reparametrization_w if inverse else (1 / reparametrization_w)
 
     with torch.no_grad():
         if inplace:
@@ -28,14 +29,16 @@ def reparametrize(
 # TODO: rename `x_` and `y_` to `h_` and `w_`
 class BoxConvolutionFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, input, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize):
+    def forward(ctx, input, x_min, x_max, y_min, y_max,
+        reparametrization_h, reparametrization_w, normalize):
+    
         # store all non-tensor arguments in `ctx`
         ctx.normalize = normalize
-        ctx.max_input_h = max_input_h
-        ctx.max_input_w = max_input_w
+        ctx.reparametrization_h = reparametrization_h
+        ctx.reparametrization_w = reparametrization_w
 
-        x_min, x_max, y_min, y_max = \
-            reparametrize(x_min, x_max, y_min, y_max, max_input_h, max_input_w, inverse=True)
+        x_min, x_max, y_min, y_max = reparametrize(
+            x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w, inverse=True)
 
         input_integrated = cpp_cuda.integral_image(input)
         
@@ -55,6 +58,8 @@ class BoxConvolutionFunction(torch.autograd.Function):
 
         retval = cpp_cuda.box_convolution_backward(
             input_integrated, x_min, x_max, y_min, y_max, grad_output, output,
-            ctx.max_input_h, ctx.max_input_w, ctx.normalize, *ctx.needs_input_grad[:5])
+            ctx.reparametrization_h, ctx.reparametrization_w,
+            ctx.normalize, *ctx.needs_input_grad[:5])
             
-        return tuple(retval) + (None,) * 3 # `None`s for `max_input_h, max_input_w, normalize`
+        # 3 `None`s for `reparametrization_h, reparametrization_w, normalize`
+        return tuple(retval) + (None,) * 3

@@ -674,23 +674,19 @@ void boxConvAccGradParameters(
 
 void clipParameters(
     at::Tensor paramMin, at::Tensor paramMax,
-    const float minSizeFloat, const float maxSizeFloat) {
-    // TODO do this in double precision
+    const double reparametrization, const double minSize, const double maxSize) {
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.type(), "cpu::clipParameters", ([&] {
 
         scalar_t *paramMinPtr = paramMin.data<scalar_t>();
         scalar_t *paramMaxPtr = paramMax.data<scalar_t>();
 
-        const scalar_t minSize = static_cast<scalar_t>(minSizeFloat);
-        const scalar_t maxSize = static_cast<scalar_t>(maxSizeFloat);
-
         for (int idx = 0; idx < paramMin.numel(); ++idx) {
-            scalar_t minValue, maxValue;
+            double minValue, maxValue;
 
                                                  /* inverse reparametrize on the fly */
-            minValue = max(-maxSize+1, min(maxSize-1, paramMinPtr[idx] * maxSize));
-            maxValue = max(-maxSize+1, min(maxSize-1, paramMaxPtr[idx] * maxSize));
+            minValue = max(-maxSize+1, min(maxSize-1, paramMinPtr[idx] * reparametrization));
+            maxValue = max(-maxSize+1, min(maxSize-1, paramMaxPtr[idx] * reparametrization));
 
             if (minValue + minSize - 0.9999 > maxValue) {
                 const scalar_t mean = 0.5 * (minValue + maxValue);
@@ -699,8 +695,8 @@ void clipParameters(
             }
 
                             /* reparametrize back */
-            paramMinPtr[idx] = minValue / maxSize;
-            paramMaxPtr[idx] = maxValue / maxSize;
+            paramMinPtr[idx] = static_cast<scalar_t>(minValue / reparametrization);
+            paramMaxPtr[idx] = static_cast<scalar_t>(maxValue / reparametrization);
         }
     }));
 }

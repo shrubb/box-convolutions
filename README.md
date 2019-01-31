@@ -1,6 +1,12 @@
 Box Convolution Layer for ConvNets
 ==================================
 
+<p align="center">
+<img src="https://user-images.githubusercontent.com/9570420/52089834-a6914e80-25c0-11e9-9516-08d74a6cfe01.gif">
+<br>
+Single-box-conv network (from `test-mnist.py`) learns patterns on MNIST
+</p>
+
 # Work in Progress
 
 **Sorry, the code isn't ready yet** :slightly_frowning_face: I intend to finish porting the layer to PyTorch in early January.
@@ -41,7 +47,7 @@ help(BoxConv2d)
 
 Tested on Ubuntu 18.04 with Python 3.6 and PyTorch 1.0.0.
 
-# Quick Tour of Box Convolutions
+# Quick Tour of Box convolutions
 
 You may want to see our [poster](https://yadi.sk/i/LNnMrj6FwbOc9A).
 

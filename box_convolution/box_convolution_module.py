@@ -7,12 +7,15 @@ import box_convolution_cpp_cuda as cpp_cuda
 class BoxConv2d(torch.nn.Module):
     def __init__(self,
         in_planes, num_filters, max_input_h, max_input_w,
-        stride_h=1, stride_w=1, normalize=True):
+        reparametrization_factor=8, stride_h=1, stride_w=1, normalize=True):
 
         super(BoxConv2d, self).__init__()
         self.in_planes = in_planes
         self.num_filters = num_filters
         self.max_input_h, self.max_input_w = max_input_h, max_input_w
+        # default reparametrization; can be changed instead of setting a separate learning rate
+        self.reparametrization_h = max_input_h * reparametrization_factor
+        self.reparametrization_w = max_input_w * reparametrization_factor
         self.stride_h, self.stride_w = stride_h, stride_w
         self.normalize = normalize
         self.exact = True
@@ -49,9 +52,9 @@ class BoxConv2d(torch.nn.Module):
 
         reparametrize(
             self.x_min, self.x_max, self.y_min, self.y_max,
-            self.max_input_h, self.max_input_w, inplace=True)
+            self.reparametrization_h, self.reparametrization_w, inplace=True)
 
-    def draw_boxes(self, channels=None, resolution=(900, 900)):
+    def draw_boxes(self, channels=None, resolution=(600, 600)):
         """
             Plots all rectangles corresponding to box filters. Useful for debugging.
             Returns the resulting image, an (H x W x 3) tensor.
@@ -77,27 +80,33 @@ class BoxConv2d(torch.nn.Module):
             mix = np.float64([220, 220, 220])
             return np.uint8(0.5 * (color + mix))
 
-        colors = [
-            [255,   0,   0],
-            [  0, 255,   0],
-            [  0,   0, 255],
-            [255, 255, 255],
-            [255, 255,   0],
-            [255,   0, 255],
-            [  0, 255, 255],
-            [130, 130, 130],
-            [255,  60, 160],
-            [ 60, 170, 255]]
-        colors += [random_color() for _ in range(self.in_planes - len(colors))]
-        colors = np.uint8(colors)
+        # heuristic for single-plane inputs
+        num_colors = self.num_filters if len(channels) == 1 else self.num_filters
 
-        x_min =  self.x_min.float()      / self.max_input_h * (resolution[0] / 2) + center[0]
-        y_min =  self.y_min.float()      / self.max_input_w * (resolution[1] / 2) + center[1]
-        x_max = (self.x_max.float() + 1) / self.max_input_h * (resolution[0] / 2) + center[0]
-        y_max = (self.y_max.float() + 1) / self.max_input_w * (resolution[1] / 2) + center[1]
+        if not hasattr(self, '_colors'):
+            colors = [
+                [255,   0,   0],
+                [  0, 255,   0],
+                [  0,   0, 255],
+                [255, 255, 255],
+                [255, 255,   0],
+                [255,   0, 255],
+                [  0, 255, 255],
+                [130, 130, 130],
+                [255,  60, 160],
+                [ 60, 170, 255]] * 2
+            colors += [random_color() for _ in range(num_colors - len(colors))]
+            self._colors = np.uint8(colors)
 
-        for color, channel_idx in zip(colors, channels):
+        x_min, x_max, y_min, y_max = (p.float() for p in self.get_actual_parameters())
+        x_min =  x_min      / self.max_input_h * (resolution[0] / 2) + center[0]
+        y_min =  y_min      / self.max_input_w * (resolution[1] / 2) + center[1]
+        x_max = (x_max + 1) / self.max_input_h * (resolution[0] / 2) + center[0]
+        y_max = (y_max + 1) / self.max_input_w * (resolution[1] / 2) + center[1]
+
+        for channel_idx in channels:
             for filter_idx in range(self.num_filters):
+                color = self._colors[filter_idx if len(channels) == 1 else channel_idx]
 
                 param_2d_idx = channel_idx, filter_idx
                 x_min_curr = x_min[param_2d_idx]
@@ -106,7 +115,8 @@ class BoxConv2d(torch.nn.Module):
                 y_max_curr = y_max[param_2d_idx]
 
                 # if a rect has negative size, fill it
-                thickness = -1 if x_min_curr > x_max_curr or y_min_curr > y_max_curr else 2
+                box_is_invalid = x_min_curr > x_max_curr or y_min_curr > y_max_curr
+                thickness = -1 if box_is_invalid else round(resolution[0] / 500 + 0.5)
 
                 cv2.rectangle(
                     retval, (y_min_curr, x_min_curr), (y_max_curr, x_max_curr),
@@ -116,12 +126,13 @@ class BoxConv2d(torch.nn.Module):
 
     def get_actual_parameters(self):
         """
-            As parameters are scaled to roughly be in [-1; 1] range, they don't represent actual
-            box coordinates. This function returns the real parameters as it they weren't rescaled.
+            As parameters are scaled to roughly be in [-1; 1] range (or even smaller -- depends on
+            your task), they don't represent actual box coordinates. This function returns the 
+            **real** parameters as it they weren't rescaled.
         """
         return reparametrize(
             self.x_min, self.x_max, self.y_min, self.y_max,
-            self.max_input_h, self.max_input_w, inplace=False, inverse=True)
+            self.reparametrization_h, self.reparametrization_w, inplace=False, inverse=True)
 
     def _clip_parameters(self):
         """
@@ -131,6 +142,7 @@ class BoxConv2d(torch.nn.Module):
         """
         cpp_cuda.clip_parameters(
             self.x_min, self.x_max, self.y_min, self.y_max,
+            self.reparametrization_h, self.reparametrization_w,
             self.max_input_h, self.max_input_w, self.exact)
 
     def train(self, mode=True):
@@ -146,4 +158,4 @@ class BoxConv2d(torch.nn.Module):
 
         return BoxConvolutionFunction.apply(
             input, self.x_min, self.x_max, self.y_min, self.y_max,
-            self.max_input_h, self.max_input_w, self.normalize)
+            self.reparametrization_h, self.reparametrization_w, self.normalize)

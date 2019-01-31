@@ -96,8 +96,8 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor x_min, at::Tensor x_max,
     at::Tensor y_min, at::Tensor y_max,
     at::Tensor grad_output, at::Tensor output,
-    const float max_input_h, const float max_input_w, const bool normalize,
-    const bool input_needs_grad,
+    const float reparametrization_h, const float reparametrization_w,
+    const bool normalize, const bool input_needs_grad,
     const bool x_min_needs_grad, const bool x_max_needs_grad,
     const bool y_min_needs_grad, const bool y_max_needs_grad) {
 
@@ -269,7 +269,7 @@ std::vector<at::Tensor> box_convolution_backward(
             if (paramNeedsGrad[paramIdx]) {
                 const Parameter paramId = static_cast<Parameter>(paramIdx);
                 const double scale = paramId == Parameter::xMin or paramId == Parameter::xMax
-                                     ? max_input_h : max_input_w;
+                                     ? reparametrization_h : reparametrization_w;
 
                 gradParam[paramIdx].mul_(scale);
             }
@@ -282,7 +282,8 @@ std::vector<at::Tensor> box_convolution_backward(
 void clip_parameters(
     at::Tensor x_min, at::Tensor x_max,
     at::Tensor y_min, at::Tensor y_max,
-    const float max_input_h, const float max_input_w, const bool exact) {
+    const double reparametrization_h, const double reparametrization_w,
+    const double max_input_h, const double max_input_w, const bool exact) {
 
     CHECK_CONTIGUOUS(x_min); // and assume other parameter tensors have same layout
 
@@ -292,7 +293,7 @@ void clip_parameters(
     if (x_min.is_cuda()) {
         THError("NYI: gpu::clip_parameters");
     } else {
-        cpu::clipParameters(x_min, x_max, minHeight, max_input_h);
-        cpu::clipParameters(y_min, y_max, minWidth , max_input_w);
+        cpu::clipParameters(x_min, x_max, reparametrization_h, minHeight, max_input_h);
+        cpu::clipParameters(y_min, y_max, reparametrization_w, minWidth , max_input_w);
     }
 }

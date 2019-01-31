@@ -32,7 +32,7 @@ void boxConvAccGradParameters(
 
 void clipParameters(
     at::Tensor paramMin, at::Tensor paramMax,
-    const float minSizeFloat, const float maxSizeFloat);
+    const double reparametrization_h, const double minSizeFloat, const double maxSizeFloat);
 
 at::Tensor computeArea(
     at::Tensor x_min, at::Tensor x_max, at::Tensor y_min, at::Tensor y_max,
