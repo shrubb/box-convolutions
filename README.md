@@ -2,7 +2,7 @@ Box Convolution Layer for ConvNets
 ==================================
 
 <p align="center">
-<img src="https://user-images.githubusercontent.com/9570420/52089834-a6914e80-25c0-11e9-9516-08d74a6cfe01.gif">
+<img src="https://user-images.githubusercontent.com/9570420/52168173-d1ea7980-2737-11e9-8924-e4e8fd39d0ee.gif">
 <br>
 Single-box-conv network (from `test-mnist.py`) learns patterns on MNIST
 </p>

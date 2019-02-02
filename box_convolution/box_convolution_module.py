@@ -54,25 +54,38 @@ class BoxConv2d(torch.nn.Module):
             self.x_min, self.x_max, self.y_min, self.y_max,
             self.reparametrization_h, self.reparametrization_w, inplace=True)
 
-    def draw_boxes(self, channels=None, resolution=(600, 600)):
+    def draw_boxes(self, channels=None, resolution=(600, 600), weights=None):
         """
-            Plots all rectangles corresponding to box filters. Useful for debugging.
-            Returns the resulting image, an (H x W x 3) tensor.
+            Plot all rectangles corresponding to box filters. Useful for debugging.
+            Return the resulting image, an (H x W x 3) tensor.
 
-            channels:   list of input channels to draw boxes for. Default: draw all boxes.
-            resolution: return image resolution. Default: 900 x 900
+            channels:   List of input channels to draw boxes for.
+                        Default: `[0, 1, ..., self.in_planes-1]` (draw all boxes).
+            resolution: Tuple (h, w) -- returned image resolution.
+                        Default: (600, 600)
+            weights:    `len(channels) x self.num_filters` array of values in [0; 1] that define
+                        "importance" of each box (e.g. function of weights from a successive
+                        convolution). More important boxes are given a brigter color, unimportant
+                        are drawn almost transparent.
+                        Default: `numpy.ones((len(channels), self.num_filters))`.
         """
         import cv2
         import numpy as np
 
         if channels is None:
             channels = range(self.in_planes)
+
+        weights_shape = (len(channels), self.num_filters)
+        if weights is None:
+            weights = np.ones(weights_shape)
+        weights = np.array(weights, dtype=np.float32).reshape(weights_shape)
+        weights.clip(0.01, 1.0, out=weights)
         
         retval = np.zeros(resolution + (3,), dtype=np.uint8)
 
         # draw gray lines at center
         center = [resolution[0] // 2, resolution[1] // 2]
-        retval[center[0]] = 70
+        retval[center[0], :] = 70
         retval[:, center[1]] = 70
 
         def random_color():
@@ -80,23 +93,25 @@ class BoxConv2d(torch.nn.Module):
             mix = np.float64([220, 220, 220])
             return np.uint8(0.5 * (color + mix))
 
-        # heuristic for single-plane inputs
-        num_colors = self.num_filters if len(channels) == 1 else self.num_filters
-
-        if not hasattr(self, '_colors'):
-            colors = [
-                [255,   0,   0],
-                [  0, 255,   0],
-                [  0,   0, 255],
-                [255, 255, 255],
-                [255, 255,   0],
-                [255,   0, 255],
-                [  0, 255, 255],
-                [130, 130, 130],
-                [255,  60, 160],
-                [ 60, 170, 255]] * 2
-            colors += [random_color() for _ in range(num_colors - len(colors))]
-            self._colors = np.uint8(colors)
+        colors = np.array([
+            [255,   0,   0],
+            [  0, 255,   0],
+            [  0,   0, 255],
+            [255, 255, 255],
+            [255, 255,   0],
+            [255,   0, 255],
+            [  0, 255, 255],
+            [ 47,  20, 255],
+            [255,  60, 160],
+            [ 60, 170, 255],
+            [ 30, 105, 210],
+            [222, 196, 176],
+            [212, 255, 127],
+            [250, 206, 135],
+            [ 50, 205,  50],
+            [  0, 165, 255],
+            [ 60,  20, 220],
+            [170, 178,  32]], dtype=np.float32)
 
         x_min, x_max, y_min, y_max = (p.float() for p in self.get_actual_parameters())
         x_min =  x_min      / self.max_input_h * (resolution[0] / 2) + center[0]
@@ -106,7 +121,11 @@ class BoxConv2d(torch.nn.Module):
 
         for channel_idx in channels:
             for filter_idx in range(self.num_filters):
-                color = self._colors[filter_idx if len(channels) == 1 else channel_idx]
+                box_weight = weights[channel_idx, filter_idx]
+                # heuristic for single-plane inputs
+                color = colors[(filter_idx if len(channels) == 1 else channel_idx) % len(colors)]
+                # take weights into account
+                color = (color * box_weight).astype(int)
 
                 param_2d_idx = channel_idx, filter_idx
                 x_min_curr = x_min[param_2d_idx]
@@ -127,8 +146,8 @@ class BoxConv2d(torch.nn.Module):
     def get_actual_parameters(self):
         """
             As parameters are scaled to roughly be in [-1; 1] range (or even smaller -- depends on
-            your task), they don't represent actual box coordinates. This function returns the 
-            **real** parameters as it they weren't rescaled.
+            your task), they don't represent actual box coordinates. Return the **real** parameters
+            as if they weren't rescaled.
         """
         return reparametrize(
             self.x_min, self.x_max, self.y_min, self.y_max,

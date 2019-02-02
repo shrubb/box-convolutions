@@ -12,8 +12,8 @@ from box_convolution import BoxConv2d
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = BoxConv2d(1, 40, 28, 28)
-        self.conv1_1x1 = nn.Conv2d(40, 40, 1, 1)
+        self.conv1 = BoxConv2d(1, 50, 28, 28)
+        self.conv1_1x1 = nn.Conv2d(50, 40, 1, 1)
 
         self.fc1 = nn.Linear(7*7*40, 10)
 
@@ -23,22 +23,38 @@ class Net(nn.Module):
 
         x = self.fc1(x.view(-1, 7*7*40))
         return F.log_softmax(x, dim=1)
-    
+
 import cv2
 box_video_resolution = (300, 300)
 box_video = cv2.VideoWriter(
-    'mnist-boxes.avi', cv2.VideoWriter_fourcc(*'MJPG'), 25, box_video_resolution)
-video_background = None # to be defined in `main()`, sorry for messy code
+    'mnist-boxes.avi', cv2.VideoWriter_fourcc(*'MJPG'), 25, tuple(reversed(box_video_resolution)))
+box_video_frame_count = 0
+video_background = None # to be defined in `main()`, sorry for globals and messy code
 
 def train(model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
+        global box_video_frame_count
+        
+        # change video background
+        if box_video_frame_count % 5 == 0:
+            global video_background # defined at the top for beautiful box visualization
+            sample_idx = torch.randint(len(train_loader.dataset), (1,)).item()
+            sample_digit = train_loader.dataset[sample_idx][0]
+            video_background = torch.nn.functional.pad(sample_digit, (14,14,14,14))
+            video_background = torch.nn.functional.interpolate(
+                video_background.unsqueeze(0), size=box_video_resolution, mode='nearest')[0,0]
+            video_background = video_background.unsqueeze(-1).repeat(1, 1, 3)
+            video_background = video_background.mul(255).round().byte().numpy()
+
         # log boxes to the video file
         if batch_idx % 5 == 0:
-            boxes_plot = model.conv1.draw_boxes(resolution=box_video_resolution)
-            # print(boxes_plot.shape, boxes_plot.dtype)
-            # print(video_background.shape, video_background.dtype)
-            box_video.write(cv2.addWeighted(boxes_plot, 1.0, video_background, 0.3, 0.0))
+            box_importances = model.conv1_1x1.weight.detach().float().abs().max(0)[0].squeeze()
+            box_importances /= box_importances.max()
+            boxes_plot = model.conv1.draw_boxes(
+                resolution=box_video_resolution, weights=box_importances)
+            box_video.write(cv2.addWeighted(boxes_plot, 1.0, video_background, 0.25, 0.0))
+            box_video_frame_count += 1
 
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -50,6 +66,9 @@ def train(model, device, train_loader, optimizer, epoch):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
+
+        for g in optimizer.param_groups:
+            g['lr'] *= 0.999
 
 def test(model, device, test_loader):
     model.eval()
@@ -92,14 +111,6 @@ def main():
             # transforms.Normalize((0.1307,), (0.3081,))
         ]))
 
-    # defined at the top for beautiful box visualization
-    global video_background
-    video_background = torch.nn.functional.pad(mnist_test[2222][0], (14,14,14,14))
-    video_background = torch.nn.functional.upsample_nearest(
-        video_background.unsqueeze(0), size=box_video_resolution)[0,0]
-    video_background = video_background.unsqueeze(-1).repeat(1, 1, 3)
-    video_background = video_background.mul(255).round().byte().numpy()
-
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader = torch.utils.data.DataLoader(
         mnist_train, batch_size=batch_size, shuffle=True, **kwargs)
@@ -112,8 +123,6 @@ def main():
     for epoch in range(1, n_epochs + 1):
         train(model, device, train_loader, optimizer, epoch)
         test(model, device, test_loader)
-        for g in optimizer.param_groups:
-            g['lr'] *= 0.1
         
 if __name__ == '__main__':
     main()
