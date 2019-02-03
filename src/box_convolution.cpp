@@ -681,22 +681,29 @@ void clipParameters(
         scalar_t *paramMinPtr = paramMin.data<scalar_t>();
         scalar_t *paramMaxPtr = paramMax.data<scalar_t>();
 
+        const double inverseReparam = 1.0 / reparametrization;
+
         for (int idx = 0; idx < paramMin.numel(); ++idx) {
+            
             double minValue, maxValue;
+            const double paramMinCurrent = static_cast<double>(paramMinPtr[idx]);
+            const double paramMaxCurrent = static_cast<double>(paramMaxPtr[idx]);
 
-                                                 /* inverse reparametrize on the fly */
-            minValue = max(-maxSize+1, min(maxSize-1, paramMinPtr[idx] * reparametrization));
-            maxValue = max(-maxSize+1, min(maxSize-1, paramMaxPtr[idx] * reparametrization));
+            // clamp parameters
+            minValue = max(-(maxSize+1) * inverseReparam,
+                min((maxSize-1) * inverseReparam, paramMinCurrent));
+            maxValue = max(-(maxSize+1) * inverseReparam,
+                min((maxSize-1) * inverseReparam, paramMaxCurrent));
 
-            if (minValue + minSize - 0.9999 > maxValue) {
+            // make sure bottom/right border doesn't come before top/left
+            if (minValue + (minSize - 0.9999) * inverseReparam > maxValue) {
                 const scalar_t mean = 0.5 * (minValue + maxValue);
-                minValue = mean - 0.5 * (minSize - 0.9999);
-                maxValue = mean + 0.5 * (minSize - 0.9999);
+                minValue = mean - 0.5 * (minSize - 0.9999) * inverseReparam;
+                maxValue = mean + 0.5 * (minSize - 0.9999) * inverseReparam;
             }
 
-                            /* reparametrize back */
-            paramMinPtr[idx] = static_cast<scalar_t>(minValue / reparametrization);
-            paramMaxPtr[idx] = static_cast<scalar_t>(maxValue / reparametrization);
+            paramMinPtr[idx] = static_cast<scalar_t>(minValue);
+            paramMaxPtr[idx] = static_cast<scalar_t>(maxValue);
         }
     }));
 }

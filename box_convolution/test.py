@@ -86,7 +86,8 @@ def test_box_convolution_module():
 
     # reference implementation
     def box_convolution_reference(
-        input, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize):
+        input, x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w, normalize):
+
         assert x_min.shape == x_max.shape
         assert x_min.shape == y_min.shape
         assert x_min.shape == y_max.shape
@@ -95,7 +96,9 @@ def test_box_convolution_module():
         assert type(normalize) is bool
 
         x_min, x_max, y_min, y_max = \
-            reparametrize(x_min, x_max, y_min, y_max, max_input_h, max_input_w, inverse=True)
+            reparametrize(
+                x_min, x_max, y_min, y_max,
+                reparametrization_h, reparametrization_w, inverse=True)
 
         in_planes, num_filters = x_min.shape
         assert input.shape[1] == in_planes
@@ -131,7 +134,8 @@ def test_box_convolution_module():
 
     # same interface for our target function
     def box_convolution_wrapper(
-        input, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize):
+        input, x_min, x_max, y_min, y_max,
+        max_input_h, max_input_w, reparametrization_factor, normalize):
 
         assert x_min.shape == x_max.shape
         assert x_min.shape == y_min.shape
@@ -143,7 +147,10 @@ def test_box_convolution_module():
         in_planes, num_filters = x_min.shape
         assert input.shape[1] == in_planes
 
-        module = BoxConv2d(in_planes, num_filters, max_input_h, max_input_w).type(input.dtype)
+        module = BoxConv2d(
+            in_planes, num_filters, max_input_h, max_input_w,
+            reparametrization_factor).type(input.dtype)
+
         del module.x_min; module.x_min = x_min
         del module.x_max; module.x_max = x_max
         del module.y_min; module.y_min = y_min
@@ -176,6 +183,9 @@ def test_box_convolution_module():
         stride_h, stride_w = 1, 1 # may change in the future
         h, w = random.randint(1+stride_h, 10), random.randint(1+stride_w, 10)
         max_input_h, max_input_w = h+1, w+1
+        reparametrization_factor = random.random() * 4.5 + 0.5
+        reparametrization_h = max_input_h * reparametrization_factor
+        reparametrization_w = max_input_w * reparametrization_factor
         gradcheck_step = 0.004
         # exact = random.random() < 0.8
 
@@ -210,7 +220,7 @@ def test_box_convolution_module():
 
         # reparametrize
         x_min, x_max, y_min, y_max = \
-            reparametrize(x_min, x_max, y_min, y_max, max_input_h, max_input_w)
+            reparametrize(x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w)
 
         # randomly test either sum filter or average filter
         normalize = random.choice((False, True))
@@ -220,13 +230,15 @@ def test_box_convolution_module():
 
         # check output and grad w.r.t. input vs reference ones
         reference_result = box_convolution_reference(
-            input_image, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize)
+            input_image, x_min, x_max, y_min, y_max,
+            reparametrization_h, reparametrization_w, normalize)
         reference_result.backward(grad_output)
         reference_grad_input = input_image.grad.clone()
         input_image.grad.zero_()
 
         our_result = box_convolution_wrapper(
-            input_image, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize)
+            input_image, x_min, x_max, y_min, y_max,
+            max_input_h, max_input_w, reparametrization_factor, normalize)
         our_result.backward(grad_output)
         our_grad_input = input_image.grad.clone()
         
@@ -259,12 +271,15 @@ def test_box_convolution_module():
         input_image.requires_grad_(False) # already tested above
 
         try:
-            original_parameters = reparametrize(x_min, x_max, y_min, y_max, h+1, w+1, inverse=True)
+            original_parameters = reparametrize(
+                x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w, inverse=True)
 
             torch.autograd.gradcheck(
                 box_convolution_wrapper,
-                (input_image, x_min, x_max, y_min, y_max, max_input_h, max_input_w, normalize),
-                eps=gradcheck_step / max(max_input_h, max_input_w), raise_exception=True)
+                    (input_image, x_min, x_max, y_min, y_max, max_input_h, max_input_w, \
+                     reparametrization_factor, normalize),
+                eps=gradcheck_step / max(reparametrization_h, reparametrization_w),
+                raise_exception=True)
         except Exception:
             print('Test %d failed at finite difference grad check w.r.t. parameters.' % test_idx)
             print('Normalize: %s' % normalize)
