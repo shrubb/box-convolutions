@@ -12,8 +12,8 @@ from box_convolution import BoxConv2d
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = BoxConv2d(1, 50, 28, 28)
-        self.conv1_1x1 = nn.Conv2d(50, 40, 1, 1)
+        self.conv1 = BoxConv2d(1, 40, 28, 28)
+        self.conv1_1x1 = nn.Conv2d(40, 40, 1, 1)
 
         self.fc1 = nn.Linear(7*7*40, 10)
 

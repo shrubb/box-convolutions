@@ -5,6 +5,47 @@ from .box_convolution_function import BoxConvolutionFunction, reparametrize
 import box_convolution_cpp_cuda as cpp_cuda
 
 class BoxConv2d(torch.nn.Module):
+    """
+        Module that performs depthwise box convolution.
+        Convolves each of the incoming channels with `num_filters` different,
+        possibly normalized, box kernels.
+
+        Input : `(batch_size) x (in_planes) x (h) x (w)`
+        Output: `(batch_size) x (in_planes*num_filters) x (h) x (w)`
+
+        Constructor arguments:
+
+        in_planes: int
+            Number of channels in the input image (as in Conv2d).
+        num_filters: int
+            Number of filters to apply per channel (as in depthwise Conv2d).
+        max_input_h, max_input_w: int
+            Maximum estimated height/width of future input images. This parameter does
+            not strictly bind input images to certain sizes. However, this is used
+            when clipping the boxes to detect if some box has become too large or has
+            drifted too far away from the image. See `_clip_parameters()` for details.
+        reparametrization_factor: float
+            In module parameters, boxes are not represented directly by their
+            relative pixel coordinates, because then the gradients will usually
+            be too small. Rather, here they are scaled into a range that is inside
+            [-1; 1] by `1 / (reparametrization_factor * max_input_[h/w])`.
+            When setting up training, generate a video of boxes using `draw_boxes()`.
+            If they move too slow, increasing this parameter might help. If they
+            converge too fast, reduce this value.
+        stride_h, stride_w: int
+            Stride (as in Conv2d). Not yet implemented.
+        normalize: bool
+            If `False`, computes sums over boxes (traditional box filters).
+            If `True`, computes averages over boxes (normalized box filters).
+
+        Useful fields (change after construction):
+
+        exact: bool
+            If `False`, box coordinates are rounded (towards smaller box size) before
+            the output is computed. Significantly faster, but might be harmful for
+            convergence. Well, still, often works for some reason, so try and see.
+            Default: `True`.
+    """
     def __init__(self,
         in_planes, num_filters, max_input_h, max_input_w,
         reparametrization_factor=8, stride_h=1, stride_w=1, normalize=True):
@@ -17,6 +58,7 @@ class BoxConv2d(torch.nn.Module):
         self.reparametrization_h = max_input_h * reparametrization_factor
         self.reparametrization_w = max_input_w * reparametrization_factor
         self.stride_h, self.stride_w = stride_h, stride_w
+        assert stride_h == 1 and stride_w == 1, 'Sorry, strides are NYI'
         self.normalize = normalize
         self.exact = True
 
@@ -88,11 +130,6 @@ class BoxConv2d(torch.nn.Module):
         retval[center[0], :] = 70
         retval[:, center[1]] = 70
 
-        def random_color():
-            color = np.random.rand(3) * 255
-            mix = np.float64([220, 220, 220])
-            return np.uint8(0.5 * (color + mix))
-
         colors = np.array([
             [255,   0,   0],
             [  0, 255,   0],
@@ -145,8 +182,10 @@ class BoxConv2d(torch.nn.Module):
 
     def get_actual_parameters(self):
         """
-            As parameters are scaled to roughly be in [-1; 1] range (or even smaller -- depends on
-            your task), they don't represent actual box coordinates. Return the **real** parameters
+            As parameters are scaled (see `reparametrization_factor`), they don't
+            represent actual box coordinates.
+
+            Return the **real** parameters (i.e. actual relative box coordinates)
             as if they weren't rescaled.
         """
         return reparametrize(
@@ -155,6 +194,8 @@ class BoxConv2d(torch.nn.Module):
 
     def _clip_parameters(self):
         """
+            Internal method, do not invoke as a user.
+
             Dirty parameter fix for projected gradient descent:
             - If a filter's width or height is negative, reset it to the minimum allowed positive.
             - If the filter is >=twice higher or wider than the input image, shrink it back.
@@ -167,6 +208,7 @@ class BoxConv2d(torch.nn.Module):
     def train(self, mode=True):
         self.training = mode
         if mode is False:
+            # TODO would be good to also precompute rounded parameters and areas
             self._clip_parameters()
 
         return self
@@ -177,4 +219,4 @@ class BoxConv2d(torch.nn.Module):
 
         return BoxConvolutionFunction.apply(
             input, self.x_min, self.x_max, self.y_min, self.y_max,
-            self.reparametrization_h, self.reparametrization_w, self.normalize)
+            self.reparametrization_h, self.reparametrization_w, self.normalize, self.exact)

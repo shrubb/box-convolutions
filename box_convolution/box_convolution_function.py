@@ -30,12 +30,13 @@ def reparametrize(
 class BoxConvolutionFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input, x_min, x_max, y_min, y_max,
-        reparametrization_h, reparametrization_w, normalize):
+        reparametrization_h, reparametrization_w, normalize, exact):
     
         # store all non-tensor arguments in `ctx`
         ctx.normalize = normalize
         ctx.reparametrization_h = reparametrization_h
         ctx.reparametrization_w = reparametrization_w
+        ctx.exact = exact
 
         x_min, x_max, y_min, y_max = reparametrize(
             x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w, inverse=True)
@@ -43,7 +44,7 @@ class BoxConvolutionFunction(torch.autograd.Function):
         input_integrated = cpp_cuda.integral_image(input)
         
         output = cpp_cuda.box_convolution_forward(
-            input_integrated, x_min, x_max, y_min, y_max, normalize)
+            input_integrated, x_min, x_max, y_min, y_max, normalize, exact)
 
         ctx.save_for_backward(
             input_integrated, x_min, x_max, y_min, y_max, output if normalize else None)
@@ -59,7 +60,7 @@ class BoxConvolutionFunction(torch.autograd.Function):
         retval = cpp_cuda.box_convolution_backward(
             input_integrated, x_min, x_max, y_min, y_max, grad_output, output,
             ctx.reparametrization_h, ctx.reparametrization_w,
-            ctx.normalize, *ctx.needs_input_grad[:5])
+            ctx.normalize, ctx.exact, *ctx.needs_input_grad[:5])
             
-        # 3 `None`s for `reparametrization_h, reparametrization_w, normalize`
-        return tuple(retval) + (None,) * 3
+        # 4 `None`s for `reparametrization_h, reparametrization_w, normalize, exact`
+        return tuple(retval) + (None,) * 4

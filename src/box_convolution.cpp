@@ -1,3 +1,6 @@
+/* CPU implementations of the functions that really operate actual tensor data 
+ * on a low level. Used by those in `box_convolution_interface.cpp`. */
+
 #include <torch/extension.h>
 
 using std::min;
@@ -36,7 +39,36 @@ void splitParameters(
     }));
 }
 
-// Splits x_min, x_max, y_min, y_max into integer and fractional parts
+// A special parameters' split for backward pass wrt input
+void splitParametersUpdateGradInput(
+    at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
+    at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
+    at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac) {
+
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "cpu::splitParametersUpdateGradInput", ([&] {
+        scalar_t minInt, maxInt;
+
+        for (int i = 0; i < x_min.numel(); ++i) {
+            minInt = std::ceil(-x_max.data<scalar_t>()[i]);
+            xMinFrac.data<scalar_t>()[i] = minInt + x_max.data<scalar_t>()[i];
+            xMinInt.data<int>()[i] = static_cast<int>(minInt);
+
+            minInt = std::ceil(-y_max.data<scalar_t>()[i]);
+            yMinFrac.data<scalar_t>()[i] = minInt + y_max.data<scalar_t>()[i];
+            yMinInt.data<int>()[i] = static_cast<int>(minInt);
+
+            maxInt = std::floor(-x_min.data<scalar_t>()[i]) + 1;
+            xMaxFrac.data<scalar_t>()[i] = -x_min.data<scalar_t>()[i] + 1 - maxInt;
+            xMaxInt.data<int>()[i] = static_cast<int>(maxInt);
+
+            maxInt = std::floor(-y_min.data<scalar_t>()[i]) + 1;
+            yMaxFrac.data<scalar_t>()[i] = -y_min.data<scalar_t>()[i] + 1 - maxInt;
+            yMaxInt.data<int>()[i] = static_cast<int>(maxInt);
+        }
+    }));
+}
+
+// A special parameters' split for backward pass wrt x_min, x_max, y_min, y_max
 void splitParametersAccGradParameters(
     at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
@@ -65,7 +97,7 @@ void splitParametersAccGradParameters(
     }));
 }
 
-template <bool normalize>
+template <bool normalize, bool exact>
 void boxConvUpdateOutput(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
@@ -101,6 +133,7 @@ void boxConvUpdateOutput(
 
                 for (int filterIdx = 0; filterIdx < xMinInt.size(1); ++filterIdx) {
                     
+                    // TODO make a separate loop for each 2D array access?
                     for (int x = 0; x < h; ++x) {
                         for (int y = 0; y < w; ++y) {
                             const int xMinCurr = xMinIntAcsr[inPlaneIdx][filterIdx];
@@ -140,77 +173,79 @@ void boxConvUpdateOutput(
                                 - inputIntAcsr[b][l]
                                 + inputIntAcsr[t][l];
 
-                            // -- xMax border
-                            outValue +=
-                                ( inputIntAcsr[bAdv][r]
-                                - inputIntAcsr[b   ][r]
-                                - inputIntAcsr[bAdv][l]
-                                + inputIntAcsr[b   ][l]) * xMaxCurrFrac;
-
-                            // -- yMax border
-                            outValue +=
-                                ( inputIntAcsr[b][rAdv]
-                                - inputIntAcsr[b][r   ]
-                                - inputIntAcsr[t][rAdv]
-                                + inputIntAcsr[t][r   ]) * yMaxCurrFrac;
-
-                            // -- xMin border
-                            outValue +=
-                                ( inputIntAcsr[t   ][r]
-                                - inputIntAcsr[tAdv][r]
-                                - inputIntAcsr[t   ][l]
-                                + inputIntAcsr[tAdv][l]) * xMinCurrFrac;
-
-                            // -- yMin border
-                            outValue +=
-                                ( inputIntAcsr[b][l   ]
-                                - inputIntAcsr[b][lAdv]
-                                - inputIntAcsr[t][l   ]
-                                + inputIntAcsr[t][lAdv]) * yMinCurrFrac;
-
-                            // -- corner pixels
-                            // Note: before, I used plain `input` to access corner values
-                            // with lower memory overhead. Moved to `input_integrated`
-                            // to get rid of an extra input to this function.
-
-                            if (not ((x+xMaxCurr >= h) | (y+yMaxCurr >= w) |
-                                     (x+xMaxCurr <  0) | (y+yMaxCurr <  0))) {
-                                outValue += 
-                                    xMaxCurrFrac * yMaxCurrFrac *
-                                    ( inputIntAcsr[b+1][r+1]
-                                    - inputIntAcsr[b  ][r+1]
-                                    - inputIntAcsr[b+1][r  ]
-                                    + inputIntAcsr[b  ][r  ]);
-                            }
-
-                            if (not ((x+xMinCurr >  h) | (y+yMaxCurr >= w) |
-                                     (x+xMinCurr <= 0) | (y+yMaxCurr <  0))) {
+                            if (exact) {
+                                // -- xMax border
                                 outValue +=
-                                    xMinCurrFrac * yMaxCurrFrac *
-                                    ( inputIntAcsr[t  ][r+1]
-                                    - inputIntAcsr[t-1][r+1]
-                                    - inputIntAcsr[t  ][r  ]
-                                    + inputIntAcsr[t-1][r  ]);
-                            }
+                                    ( inputIntAcsr[bAdv][r]
+                                    - inputIntAcsr[b   ][r]
+                                    - inputIntAcsr[bAdv][l]
+                                    + inputIntAcsr[b   ][l]) * xMaxCurrFrac;
 
-                            if (not ((x+xMaxCurr >= h) | (y+yMinCurr >  w) |
-                                     (x+xMaxCurr <  0) | (y+yMinCurr <= 0))) {
+                                // -- yMax border
                                 outValue +=
-                                    xMaxCurrFrac * yMinCurrFrac *
-                                    ( inputIntAcsr[b+1][l  ]
-                                    - inputIntAcsr[b  ][l  ]
-                                    - inputIntAcsr[b+1][l-1]
-                                    + inputIntAcsr[b  ][l-1]);
-                            }
+                                    ( inputIntAcsr[b][rAdv]
+                                    - inputIntAcsr[b][r   ]
+                                    - inputIntAcsr[t][rAdv]
+                                    + inputIntAcsr[t][r   ]) * yMaxCurrFrac;
 
-                            if (not ((x+xMinCurr >  h) | (y+yMinCurr >  w) |
-                                     (x+xMinCurr <= 0) | (y+yMinCurr <= 0))) {
+                                // -- xMin border
                                 outValue +=
-                                    xMinCurrFrac * yMinCurrFrac *
-                                    ( inputIntAcsr[t  ][l  ]
-                                    - inputIntAcsr[t-1][l  ]
-                                    - inputIntAcsr[t  ][l-1]
-                                    + inputIntAcsr[t-1][l-1]);
+                                    ( inputIntAcsr[t   ][r]
+                                    - inputIntAcsr[tAdv][r]
+                                    - inputIntAcsr[t   ][l]
+                                    + inputIntAcsr[tAdv][l]) * xMinCurrFrac;
+
+                                // -- yMin border
+                                outValue +=
+                                    ( inputIntAcsr[b][l   ]
+                                    - inputIntAcsr[b][lAdv]
+                                    - inputIntAcsr[t][l   ]
+                                    + inputIntAcsr[t][lAdv]) * yMinCurrFrac;
+
+                                // -- corner pixels
+                                // Note: before, I used plain `input` to access corner values
+                                // with lower memory overhead. Moved to `input_integrated`
+                                // to get rid of an extra input to this function.
+
+                                if (not ((x+xMaxCurr >= h) | (y+yMaxCurr >= w) |
+                                         (x+xMaxCurr <  0) | (y+yMaxCurr <  0))) {
+                                    outValue += 
+                                        xMaxCurrFrac * yMaxCurrFrac *
+                                        ( inputIntAcsr[b+1][r+1]
+                                        - inputIntAcsr[b  ][r+1]
+                                        - inputIntAcsr[b+1][r  ]
+                                        + inputIntAcsr[b  ][r  ]);
+                                }
+
+                                if (not ((x+xMinCurr >  h) | (y+yMaxCurr >= w) |
+                                         (x+xMinCurr <= 0) | (y+yMaxCurr <  0))) {
+                                    outValue +=
+                                        xMinCurrFrac * yMaxCurrFrac *
+                                        ( inputIntAcsr[t  ][r+1]
+                                        - inputIntAcsr[t-1][r+1]
+                                        - inputIntAcsr[t  ][r  ]
+                                        + inputIntAcsr[t-1][r  ]);
+                                }
+
+                                if (not ((x+xMaxCurr >= h) | (y+yMinCurr >  w) |
+                                         (x+xMaxCurr <  0) | (y+yMinCurr <= 0))) {
+                                    outValue +=
+                                        xMaxCurrFrac * yMinCurrFrac *
+                                        ( inputIntAcsr[b+1][l  ]
+                                        - inputIntAcsr[b  ][l  ]
+                                        - inputIntAcsr[b+1][l-1]
+                                        + inputIntAcsr[b  ][l-1]);
+                                }
+
+                                if (not ((x+xMinCurr >  h) | (y+yMinCurr >  w) |
+                                         (x+xMinCurr <= 0) | (y+yMinCurr <= 0))) {
+                                    outValue +=
+                                        xMinCurrFrac * yMinCurrFrac *
+                                        ( inputIntAcsr[t  ][l  ]
+                                        - inputIntAcsr[t-1][l  ]
+                                        - inputIntAcsr[t  ][l-1]
+                                        + inputIntAcsr[t-1][l-1]);
+                                }
                             }
 
                             *(outputData++) = outValue * 
@@ -226,12 +261,22 @@ void boxConvUpdateOutput(
 }
 
 // explicitly instantiate
-template void boxConvUpdateOutput<true>(
+template void boxConvUpdateOutput<true, true>(
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
 
-template void boxConvUpdateOutput<false>(
+template void boxConvUpdateOutput<false, true>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
+template void boxConvUpdateOutput<true, false>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
+template void boxConvUpdateOutput<false, false>(
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
@@ -239,7 +284,7 @@ template void boxConvUpdateOutput<false>(
 
 // `grad_output_integrated` size: {batchSize, nInputPlanes, numFilters, h+1, w+1}
 // `tmpArray` size: {batchSize, nInputPlanes, numFilters, h, w}
-template <bool normalize>
+template <bool normalize, bool exact>
 void boxConvUpdateGradInput(
     at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
@@ -250,28 +295,7 @@ void boxConvUpdateGradInput(
     const int w = tmpArray.size(-1);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "boxConvUpdateGradInputCPU", ([&] {
-        // A special parameters' split for backward pass
-        scalar_t minInt, maxInt;
 
-        for (int i = 0; i < x_min.numel(); ++i) {
-            minInt = std::ceil(-x_max.data<scalar_t>()[i]);
-            xMinFrac.data<scalar_t>()[i] = minInt + x_max.data<scalar_t>()[i];
-            xMinInt.data<int>()[i] = static_cast<int>(minInt);
-
-            minInt = std::ceil(-y_max.data<scalar_t>()[i]);
-            yMinFrac.data<scalar_t>()[i] = minInt + y_max.data<scalar_t>()[i];
-            yMinInt.data<int>()[i] = static_cast<int>(minInt);
-
-            maxInt = std::floor(-x_min.data<scalar_t>()[i]) + 1;
-            xMaxFrac.data<scalar_t>()[i] = -x_min.data<scalar_t>()[i] + 1 - maxInt;
-            xMaxInt.data<int>()[i] = static_cast<int>(maxInt);
-
-            maxInt = std::floor(-y_min.data<scalar_t>()[i]) + 1;
-            yMaxFrac.data<scalar_t>()[i] = -y_min.data<scalar_t>()[i] + 1 - maxInt;
-            yMaxInt.data<int>()[i] = static_cast<int>(maxInt);
-        }
-
-        // Actually fill gradInput
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
         auto yMinIntAcsr = yMinInt.accessor<int, 2>();
@@ -329,94 +353,96 @@ void boxConvUpdateGradInput(
                                 - gradOutputAcsr[b][l]
                                 + gradOutputAcsr[t][l];
 
-                            // -- xMax border
-                            outValue +=
-                                ( gradOutputAcsr[bAdv][r]
-                                - gradOutputAcsr[b   ][r]
-                                - gradOutputAcsr[bAdv][l]
-                                + gradOutputAcsr[b   ][l]
-                                ) * xMaxCurrFrac;
+                            if (exact) {
+                                // -- xMax border
+                                outValue +=
+                                    ( gradOutputAcsr[bAdv][r]
+                                    - gradOutputAcsr[b   ][r]
+                                    - gradOutputAcsr[bAdv][l]
+                                    + gradOutputAcsr[b   ][l]
+                                    ) * xMaxCurrFrac;
 
-                            // -- yMax border
-                            outValue +=
-                                ( gradOutputAcsr[b][rAdv]
-                                - gradOutputAcsr[b][r   ]
-                                - gradOutputAcsr[t][rAdv]
-                                + gradOutputAcsr[t][r   ]
-                                ) * yMaxCurrFrac;
+                                // -- yMax border
+                                outValue +=
+                                    ( gradOutputAcsr[b][rAdv]
+                                    - gradOutputAcsr[b][r   ]
+                                    - gradOutputAcsr[t][rAdv]
+                                    + gradOutputAcsr[t][r   ]
+                                    ) * yMaxCurrFrac;
 
-                            // -- xMin border
-                            outValue +=
-                                ( gradOutputAcsr[t   ][r]
-                                - gradOutputAcsr[tAdv][r]
-                                - gradOutputAcsr[t   ][l]
-                                + gradOutputAcsr[tAdv][l]
-                                ) * xMinCurrFrac;
+                                // -- xMin border
+                                outValue +=
+                                    ( gradOutputAcsr[t   ][r]
+                                    - gradOutputAcsr[tAdv][r]
+                                    - gradOutputAcsr[t   ][l]
+                                    + gradOutputAcsr[tAdv][l]
+                                    ) * xMinCurrFrac;
 
-                            // -- yMin border
-                            outValue +=
-                                ( gradOutputAcsr[b][l   ]
-                                - gradOutputAcsr[b][lAdv]
-                                - gradOutputAcsr[t][l   ]
-                                + gradOutputAcsr[t][lAdv]
-                                ) * yMinCurrFrac;
+                                // -- yMin border
+                                outValue +=
+                                    ( gradOutputAcsr[b][l   ]
+                                    - gradOutputAcsr[b][lAdv]
+                                    - gradOutputAcsr[t][l   ]
+                                    + gradOutputAcsr[t][lAdv]
+                                    ) * yMinCurrFrac;
 
-                            // -- corner pixels
-                            outValue += 
-                                xMaxCurrFrac*yMaxCurrFrac * (
-                                   (x+xMaxCurr >= h or
-                                    y+yMaxCurr >= w or
-                                    x+xMaxCurr <  0 or
-                                    y+yMaxCurr <  0 or
-                                    b == bAdv or
-                                    r == rAdv) ? static_cast<scalar_t>(0) : 
-                                    
-                                    ( gradOutputAcsr[b+1][r+1]
-                                    - gradOutputAcsr[b  ][r+1]
-                                    - gradOutputAcsr[b+1][r  ]
-                                    + gradOutputAcsr[b  ][r  ]));
+                                // -- corner pixels
+                                outValue += 
+                                    xMaxCurrFrac*yMaxCurrFrac * (
+                                       (x+xMaxCurr >= h or
+                                        y+yMaxCurr >= w or
+                                        x+xMaxCurr <  0 or
+                                        y+yMaxCurr <  0 or
+                                        b == bAdv or
+                                        r == rAdv) ? static_cast<scalar_t>(0) : 
+                                        
+                                        ( gradOutputAcsr[b+1][r+1]
+                                        - gradOutputAcsr[b  ][r+1]
+                                        - gradOutputAcsr[b+1][r  ]
+                                        + gradOutputAcsr[b  ][r  ]));
 
-                            outValue +=
-                                xMinCurrFrac*yMaxCurrFrac * (
-                                   (x+xMinCurr >  h or
-                                    y+yMaxCurr >= w or
-                                    x+xMinCurr <= 0 or
-                                    y+yMaxCurr <  0 or
-                                    t == tAdv or
-                                    r == rAdv) ? static_cast<scalar_t>(0) : 
-                                    
-                                    ( gradOutputAcsr[tAdv+1][r+1]
-                                    - gradOutputAcsr[tAdv+1][r  ]
-                                    - gradOutputAcsr[tAdv  ][r+1]
-                                    + gradOutputAcsr[tAdv  ][r  ]));
+                                outValue +=
+                                    xMinCurrFrac*yMaxCurrFrac * (
+                                       (x+xMinCurr >  h or
+                                        y+yMaxCurr >= w or
+                                        x+xMinCurr <= 0 or
+                                        y+yMaxCurr <  0 or
+                                        t == tAdv or
+                                        r == rAdv) ? static_cast<scalar_t>(0) : 
+                                        
+                                        ( gradOutputAcsr[tAdv+1][r+1]
+                                        - gradOutputAcsr[tAdv+1][r  ]
+                                        - gradOutputAcsr[tAdv  ][r+1]
+                                        + gradOutputAcsr[tAdv  ][r  ]));
 
-                            outValue +=
-                                xMaxCurrFrac*yMinCurrFrac * (
-                                   (x+xMaxCurr >= h or
-                                    y+yMinCurr >  w or
-                                    x+xMaxCurr <  0 or
-                                    y+yMinCurr <= 0 or
-                                    b == bAdv or
-                                    l == lAdv) ? static_cast<scalar_t>(0) : 
-                                    
-                                    ( gradOutputAcsr[b+1][lAdv+1]
-                                    - gradOutputAcsr[b  ][lAdv+1]
-                                    - gradOutputAcsr[b+1][lAdv  ]
-                                    + gradOutputAcsr[b  ][lAdv  ]));
+                                outValue +=
+                                    xMaxCurrFrac*yMinCurrFrac * (
+                                       (x+xMaxCurr >= h or
+                                        y+yMinCurr >  w or
+                                        x+xMaxCurr <  0 or
+                                        y+yMinCurr <= 0 or
+                                        b == bAdv or
+                                        l == lAdv) ? static_cast<scalar_t>(0) : 
+                                        
+                                        ( gradOutputAcsr[b+1][lAdv+1]
+                                        - gradOutputAcsr[b  ][lAdv+1]
+                                        - gradOutputAcsr[b+1][lAdv  ]
+                                        + gradOutputAcsr[b  ][lAdv  ]));
 
-                            outValue +=
-                                xMinCurrFrac*yMinCurrFrac * (
-                                   (x+xMinCurr >  h or
-                                    y+yMinCurr >  w or
-                                    x+xMinCurr <= 0 or
-                                    y+yMinCurr <= 0 or
-                                    t == tAdv or
-                                    l == lAdv) ? static_cast<scalar_t>(0) : 
-                                    
-                                    ( gradOutputAcsr[tAdv+1][lAdv+1]
-                                    - gradOutputAcsr[tAdv+1][lAdv  ]
-                                    - gradOutputAcsr[tAdv  ][lAdv+1]
-                                    + gradOutputAcsr[tAdv  ][lAdv  ]));
+                                outValue +=
+                                    xMinCurrFrac*yMinCurrFrac * (
+                                       (x+xMinCurr >  h or
+                                        y+yMinCurr >  w or
+                                        x+xMinCurr <= 0 or
+                                        y+yMinCurr <= 0 or
+                                        t == tAdv or
+                                        l == lAdv) ? static_cast<scalar_t>(0) : 
+                                        
+                                        ( gradOutputAcsr[tAdv+1][lAdv+1]
+                                        - gradOutputAcsr[tAdv+1][lAdv  ]
+                                        - gradOutputAcsr[tAdv  ][lAdv+1]
+                                        + gradOutputAcsr[tAdv  ][lAdv  ]));
+                            }
 
                             *(tmpArrayData++) = outValue *
                                 (normalize ? 
@@ -431,21 +457,34 @@ void boxConvUpdateGradInput(
 }
 
 // explicitly instantiate
-template void boxConvUpdateGradInput<true>(
+template void boxConvUpdateGradInput<true, true>(
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
 
-template void boxConvUpdateGradInput<false>(
+template void boxConvUpdateGradInput<false, true>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
+template void boxConvUpdateGradInput<true, false>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &);
+
+template void boxConvUpdateGradInput<false, false>(
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
 
 
-// tmpArray size: {batchSize, nInputPlanes, numFilters, h, w}
+template <bool exact>
 void boxConvAccGradParameters(
+    // tmpArray size: {batchSize, nInputPlanes, numFilters, h, w}
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & input_integrated, at::Tensor & tmpArray, Parameter parameter) {
@@ -497,6 +536,7 @@ void boxConvAccGradParameters(
                                 
                                 scalar_t delta = 0;
                                 
+                                if (exact) {
                                 // TODO maybe use `input` instead of `inputInt`
                                 valid =
                                     not (y+yMinInt < 1) & not (y+yMinInt > w) & not (x+xMinInt < 1);
@@ -520,6 +560,7 @@ void boxConvAccGradParameters(
                                 
                                 delta += trCorner * yMaxFrac;
                                 delta += tlCorner * yMinFrac;
+                                } // if (exact)
 
                                 delta += inputIntAcsr
                                     [max(0,min(x+xMinInt  , h))][max(0,min(y+yMaxInt  , w))];
@@ -541,6 +582,7 @@ void boxConvAccGradParameters(
                                 
                                 scalar_t delta = 0;
 
+                                if (exact) {
                                 valid =
                                     not (y+yMinInt < 1) & not (y+yMinInt > w) & not (x+xMaxInt >= h);
                                 cornerX = max(0,min(h-1,x+xMaxInt  ));
@@ -563,6 +605,7 @@ void boxConvAccGradParameters(
                                 
                                 delta += brCorner * yMaxFrac;
                                 delta += blCorner * yMinFrac;
+                                } // if (exact)
 
                                 delta += inputIntAcsr
                                     [max(0,min(x+xMaxInt+1, h))][max(0,min(y+yMaxInt  , w))];
@@ -584,6 +627,7 @@ void boxConvAccGradParameters(
                                 
                                 scalar_t delta = 0;
 
+                                if (exact) {
                                 valid =
                                     not (y+yMinInt < 1) & not (x+xMinInt < 1) & not (x+xMinInt > h);
                                 cornerX = max(0,min(h-1,x+xMinInt-1));
@@ -606,6 +650,7 @@ void boxConvAccGradParameters(
                                 
                                 delta += tlCorner * xMinFrac;
                                 delta += blCorner * xMaxFrac;
+                                } // if (exact)
 
                                 delta += inputIntAcsr
                                     [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMinInt  , w))];
@@ -627,6 +672,7 @@ void boxConvAccGradParameters(
                                 
                                 scalar_t delta = 0;
 
+                                if (exact) {
                                 valid =
                                     not (y+yMaxInt >= w) & not (x+xMinInt < 1) & not (x+xMinInt > h);
                                 cornerX = max(0,min(h-1,x+xMinInt-1));
@@ -649,6 +695,7 @@ void boxConvAccGradParameters(
                                 
                                 delta += trCorner * xMinFrac;
                                 delta += brCorner * xMaxFrac;
+                                } // if (exact)
 
                                 delta += inputIntAcsr
                                     [max(0,min(x+xMaxInt  , h))][max(0,min(y+yMaxInt+1, w))];
@@ -669,8 +716,19 @@ void boxConvAccGradParameters(
             } // inPlaneIdx
         } // batchIdx
     }));
-
 }
+
+// explicitly instantiate
+template void boxConvAccGradParameters<true>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, Parameter);
+
+template void boxConvAccGradParameters<false>(
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
+    at::Tensor &, at::Tensor &, Parameter);
+
 
 void clipParameters(
     at::Tensor paramMin, at::Tensor paramMax,
@@ -710,16 +768,24 @@ void clipParameters(
 
 at::Tensor computeArea(
     at::Tensor x_min, at::Tensor x_max, at::Tensor y_min, at::Tensor y_max,
-    const bool needXDeriv = true, const bool needYDeriv = true) {
+    const bool exact, const bool needXDeriv = true, const bool needYDeriv = true) {
 
-    // TODO: how to stop tracking operations? `.is_variable_(false)` doesn't work
+    // TODO: how to stop tracking operations??? `.is_variable_(false)` doesn't work
     auto retval = at::ones_like(x_min);
+
+    if (not exact) {
+        x_min = x_min.ceil();
+        y_min = y_min.ceil();
+        x_max = x_max.floor();
+        y_max = y_max.floor();
+    }
 
     if (needXDeriv) {
         auto xArea = x_max - x_min;
         xArea += 1;
         retval *= xArea;
     }
+
     if (needYDeriv) {
         auto yArea = y_max - y_min;
         yArea += 1;

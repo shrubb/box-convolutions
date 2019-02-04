@@ -1,3 +1,5 @@
+/* Functions actually called from Python. Registered in torch module in `bind.cpp` */
+
 #include <torch/extension.h>
 #include <ATen/AccumulateType.h>
 #include <TH/THGeneral.h>
@@ -11,7 +13,8 @@ at::Tensor integral_image(at::Tensor input);
 at::Tensor box_convolution_forward(
     at::Tensor input_integrated,
     at::Tensor x_min, at::Tensor x_max,
-    at::Tensor y_min, at::Tensor y_max, const bool normalize) {
+    at::Tensor y_min, at::Tensor y_max,
+    const bool normalize, const bool exact) {
 
     CHECK_CONTIGUOUS(input_integrated);
     AT_CHECK(input_integrated.dim() == 4, "box conv input must have 4 dimensions");
@@ -28,7 +31,8 @@ at::Tensor box_convolution_forward(
         "all box conv parameters must have equal number of columns");
 
     // Split x_min, x_max, y_min, y_max into integer and fractional parts
-    auto intOptions = x_min.options().is_variable(false).dtype(caffe2::TypeMeta::Make<int>());
+    // TODO how to force is_variable(false)? How to set is_variable on an existing tensor?
+    auto intOptions = x_min.options().is_variable(true).dtype(caffe2::TypeMeta::Make<int>());
     auto xMinInt = at::empty(x_min.sizes(), intOptions);
     auto xMaxInt = at::empty(x_min.sizes(), intOptions);
     auto yMinInt = at::empty(x_min.sizes(), intOptions);
@@ -45,9 +49,19 @@ at::Tensor box_convolution_forward(
 
     if (x_min.is_cuda()) {
         THError("NYI: gpu::splitParameters");
+        // gpu::splitParameters(
+        //     x_min   , x_max   , y_min   , y_max   ,
+        //     xMinInt , xMaxInt , yMinInt , yMaxInt ,
+        //     xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
         if (normalize) {
-            THError("NYI: gpu::computeArea");
+            if (exact) {
+                THError("NYI: gpu::computeArea");
+                // area = gpu::computeArea(x_min, x_max, y_min, y_max);
+            } else {
+                THError("NYI: gpu::computeArea");
+                // area = gpu::computeArea(xMinInt, xMaxInt, yMinInt, yMaxInt);
+            }
         }
     } else {
         cpu::splitParameters(
@@ -56,7 +70,7 @@ at::Tensor box_convolution_forward(
             xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
         if (normalize) {
-            area = cpu::computeArea(x_min, x_max, y_min, y_max);
+            area = cpu::computeArea(x_min, x_max, y_min, y_max, exact);
         }
     }
 
@@ -75,16 +89,31 @@ at::Tensor box_convolution_forward(
     if (input_integrated.is_cuda()) {
         THError("NYI: gpu::boxConvUpdateOutput");
     } else {
+        // TODO what is the common practice of avoiding such `if`s? 
         if (normalize) {
-            cpu::boxConvUpdateOutput<true>(
-                xMinInt , xMaxInt , yMinInt , yMaxInt ,
-                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                area, input_integrated, output);
+            if (exact) {
+                cpu::boxConvUpdateOutput<true, true>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            } else {
+                cpu::boxConvUpdateOutput<true, false>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            }
         } else {
-            cpu::boxConvUpdateOutput<false>(
-                xMinInt , xMaxInt , yMinInt , yMaxInt ,
-                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                area, input_integrated, output);
+            if (exact) {
+                cpu::boxConvUpdateOutput<false, true>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            } else {
+                cpu::boxConvUpdateOutput<false, false>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            }
         }
     }
 
@@ -97,7 +126,8 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor y_min, at::Tensor y_max,
     at::Tensor grad_output, at::Tensor output,
     const float reparametrization_h, const float reparametrization_w,
-    const bool normalize, const bool input_needs_grad,
+    const bool normalize, const bool exact,
+    const bool input_needs_grad,
     const bool x_min_needs_grad, const bool x_max_needs_grad,
     const bool y_min_needs_grad, const bool y_max_needs_grad) {
 
@@ -135,7 +165,8 @@ std::vector<at::Tensor> box_convolution_backward(
     at::Tensor gradInput = nullTensor;
 
     // Allocate memory for splitting x_min, x_max, y_min, y_max into integer and fractional parts
-    auto intOptions = x_min.options().is_variable(false).dtype(caffe2::TypeMeta::Make<int>());
+    // TODO how to force is_variable(false)? How to set is_variable on an existing tensor?
+    auto intOptions = x_min.options().is_variable(true).dtype(caffe2::TypeMeta::Make<int>());
     auto xMinInt = at::empty(x_min.sizes(), intOptions);
     auto xMaxInt = at::empty(x_min.sizes(), intOptions);
     auto yMinInt = at::empty(x_min.sizes(), intOptions);
@@ -146,7 +177,6 @@ std::vector<at::Tensor> box_convolution_backward(
     auto xMaxFrac = at::empty(x_min.sizes(), fracOptions);
     auto yMinFrac = at::empty(x_min.sizes(), fracOptions);
     auto yMaxFrac = at::empty(x_min.sizes(), fracOptions);
-
 
     if (input_needs_grad) {
         at::Tensor grad_output_integrated = integral_image(grad_output);
@@ -164,20 +194,41 @@ std::vector<at::Tensor> box_convolution_backward(
 
             THError("NYI: gpu::boxConvUpdateGradInput");
         } else {
-            if (normalize) {
-                area = cpu::computeArea(x_min, x_max, y_min, y_max);
+            cpu::splitParametersUpdateGradInput(
+                x_min   , x_max   , y_min   , y_max   ,
+                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
-                cpu::boxConvUpdateGradInput<true>(
-                    x_min, x_max, y_min, y_max,
-                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
-                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                    area, grad_output_integrated, tmpArray);
+            if (normalize) {
+                area = cpu::computeArea(x_min, x_max, y_min, y_max, exact);
+
+                if (exact) {
+                    cpu::boxConvUpdateGradInput<true, true>(
+                        x_min, x_max, y_min, y_max,
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                } else {
+                    cpu::boxConvUpdateGradInput<true, false>(
+                        x_min, x_max, y_min, y_max,
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                }
             } else {
-                cpu::boxConvUpdateGradInput<false>(
-                    x_min, x_max, y_min, y_max,
-                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
-                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                    area, grad_output_integrated, tmpArray);
+                if (exact) {
+                    cpu::boxConvUpdateGradInput<false, true>(
+                        x_min, x_max, y_min, y_max,
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                } else {
+                    cpu::boxConvUpdateGradInput<false, false>(
+                        x_min, x_max, y_min, y_max,
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                }
             }
         }
 
@@ -211,7 +262,7 @@ std::vector<at::Tensor> box_convolution_backward(
                 xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
             if (normalize) {
-                area = cpu::computeArea(x_min, x_max, y_min, y_max);
+                area = cpu::computeArea(x_min, x_max, y_min, y_max, exact);
             }
         }
 
@@ -221,10 +272,18 @@ std::vector<at::Tensor> box_convolution_backward(
 
                 if (input_integrated.is_cuda()) {
                     THError("NYI: gpu::boxConvAccGradParameters");
-                } else {cpu::boxConvAccGradParameters(
-                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
-                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
-                        input_integrated, tmpArray, paramId);
+                } else {
+                    if (exact) {
+                        cpu::boxConvAccGradParameters<true>(
+                            xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                            xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                            input_integrated, tmpArray, paramId);
+                    } else {
+                        cpu::boxConvAccGradParameters<false>(
+                            xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                            xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                            input_integrated, tmpArray, paramId);
+                    }
                 }
 
                 tmpArray.mul_(grad_output);
@@ -255,7 +314,8 @@ std::vector<at::Tensor> box_convolution_backward(
                     if (x_min.is_cuda()) {
                         THError("NYI: gpu::computeArea");
                     } else {
-                        area = cpu::computeArea(x_min, x_max, y_min, y_max, needXDeriv, needYDeriv);
+                        area = cpu::computeArea(
+                            x_min, x_max, y_min, y_max, exact, needXDeriv, needYDeriv);
                     }
 
                     const bool minus = paramId == Parameter::xMax or paramId == Parameter::yMax;
