@@ -24,37 +24,44 @@ class Net(nn.Module):
         x = self.fc1(x.view(-1, 7*7*40))
         return F.log_softmax(x, dim=1)
 
-import cv2
-box_video_resolution = (300, 300)
-box_video = cv2.VideoWriter(
-    'mnist-boxes.avi', cv2.VideoWriter_fourcc(*'MJPG'), 25, tuple(reversed(box_video_resolution)))
-box_video_frame_count = 0
-video_background = None # to be defined in `main()`, sorry for globals and messy code
+try:
+    import cv2
+    box_video_resolution = (300, 300)
+    box_video = cv2.VideoWriter(
+        'mnist-boxes.avi', cv2.VideoWriter_fourcc(*'MJPG'), 25, tuple(reversed(box_video_resolution)))
+    box_video_frame_count = 0
+    video_background = None # to be defined in `main()`, sorry for globals and messy code
+except ImportError:
+    box_video = None
+    print('Couldn\'t import OpenCV. Will not log boxes to a video file')
 
 def train(model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
-        global box_video_frame_count
         
-        # change video background
-        if box_video_frame_count % 5 == 0:
-            global video_background # defined at the top for beautiful box visualization
-            sample_idx = torch.randint(len(train_loader.dataset), (1,)).item()
-            sample_digit = train_loader.dataset[sample_idx][0]
-            video_background = torch.nn.functional.pad(sample_digit, (14,14,14,14))
-            video_background = torch.nn.functional.interpolate(
-                video_background.unsqueeze(0), size=box_video_resolution, mode='nearest')[0,0]
-            video_background = video_background.unsqueeze(-1).repeat(1, 1, 3)
-            video_background = video_background.mul(255).round().byte().numpy()
+        # log boxes to a video file
+        if box_video is not None:
+            global box_video_frame_count
+            
+            # change video background
+            if box_video_frame_count % 5 == 0:
+                global video_background # defined at the top for beautiful box visualization
+                sample_idx = torch.randint(len(train_loader.dataset), (1,)).item()
+                sample_digit = train_loader.dataset[sample_idx][0]
+                video_background = torch.nn.functional.pad(sample_digit, (14,14,14,14))
+                video_background = torch.nn.functional.interpolate(
+                    video_background.unsqueeze(0), size=box_video_resolution, mode='nearest')[0,0]
+                video_background = video_background.unsqueeze(-1).repeat(1, 1, 3)
+                video_background = video_background.mul(255).round().byte().numpy()
 
-        # log boxes to the video file
-        if batch_idx % 5 == 0:
-            box_importances = model.conv1_1x1.weight.detach().float().abs().max(0)[0].squeeze()
-            box_importances /= box_importances.max()
-            boxes_plot = model.conv1.draw_boxes(
-                resolution=box_video_resolution, weights=box_importances)
-            box_video.write(cv2.addWeighted(boxes_plot, 1.0, video_background, 0.25, 0.0))
-            box_video_frame_count += 1
+            # log boxes to the video file
+            if batch_idx % 5 == 0:
+                box_importances = model.conv1_1x1.weight.detach().float().abs().max(0)[0].squeeze()
+                box_importances /= box_importances.max()
+                boxes_plot = model.conv1.draw_boxes(
+                    resolution=box_video_resolution, weights=box_importances)
+                box_video.write(cv2.addWeighted(boxes_plot, 1.0, video_background, 0.25, 0.0))
+                box_video_frame_count += 1
 
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()

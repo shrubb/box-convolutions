@@ -11,6 +11,8 @@ Single-box-conv network (from `test-mnist.py`) learns patterns on MNIST
 
 **Sorry, the code isn't ready yet** :slightly_frowning_face: I intend to finish porting the layer to PyTorch in early January.
 
+CPU version is out. GPU will be there soon.
+
 <sup>If you are REALLY curious, the actual implementation used for experiments can be found [here](https://github.com/shrubb/integral-layer). But please, please, don't use it. It's undocumented and is in Torch7 (Lua).<sup>
 
 # What This Is
@@ -40,10 +42,11 @@ pip3 uninstall box_convolution
 ```python3
 import torch
 from box_convolution import BoxConv2d
-# optionally, torch.nn.BoxConv2d = BoxConv2d
 
 help(BoxConv2d)
 ```
+
+There is a usage example in `test-mnist.py`.
 
 Tested on Ubuntu 18.04 with Python 3.6 and PyTorch 1.0.0.
 
