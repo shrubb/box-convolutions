@@ -6,7 +6,7 @@
 using std::min;
 using std::max;
 
-enum class Parameter {xMin, xMax, yMin, yMax};
+#include "box_convolution.h" // for `enum class Parameter`
 
 namespace cpu {
 
@@ -106,7 +106,7 @@ void boxConvUpdateOutput(
     const int h = output.size(-2);
     const int w = output.size(-1);
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "boxConvUpdateOutputCPU", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "cpu::boxConvUpdateOutput", ([&] {
 
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
@@ -294,7 +294,7 @@ void boxConvUpdateGradInput(
     const int h = tmpArray.size(-2);
     const int w = tmpArray.size(-1);
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "boxConvUpdateGradInputCPU", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "cpu::boxConvUpdateGradInput", ([&] {
 
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
@@ -768,7 +768,7 @@ void clipParameters(
 
 at::Tensor computeArea(
     at::Tensor x_min, at::Tensor x_max, at::Tensor y_min, at::Tensor y_max,
-    const bool exact, const bool needXDeriv = true, const bool needYDeriv = true) {
+    const bool exact, const bool needXDeriv, const bool needYDeriv) {
 
     // TODO: how to stop tracking operations??? `.is_variable_(false)` doesn't work
     auto retval = at::ones_like(x_min);

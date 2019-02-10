@@ -48,20 +48,13 @@ at::Tensor box_convolution_forward(
     at::Tensor area;
 
     if (x_min.is_cuda()) {
-        THError("NYI: gpu::splitParameters");
-        // gpu::splitParameters(
-        //     x_min   , x_max   , y_min   , y_max   ,
-        //     xMinInt , xMaxInt , yMinInt , yMaxInt ,
-        //     xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
+        gpu::splitParameters(
+            x_min   , x_max   , y_min   , y_max   ,
+            xMinInt , xMaxInt , yMinInt , yMaxInt ,
+            xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
         if (normalize) {
-            if (exact) {
-                THError("NYI: gpu::computeArea");
-                // area = gpu::computeArea(x_min, x_max, y_min, y_max);
-            } else {
-                THError("NYI: gpu::computeArea");
-                // area = gpu::computeArea(xMinInt, xMaxInt, yMinInt, yMaxInt);
-            }
+            // area = gpu::computeArea(x_min, x_max, y_min, y_max, exact);
         }
     } else {
         cpu::splitParameters(
@@ -87,9 +80,33 @@ at::Tensor box_convolution_forward(
 
     // Actually fill `output`
     if (input_integrated.is_cuda()) {
-        THError("NYI: gpu::boxConvUpdateOutput");
-    } else {
         // TODO what is the common practice of avoiding such `if`s? 
+        if (normalize) {
+            if (exact) {
+                gpu::boxConvUpdateOutput<true, true>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            } else {
+                gpu::boxConvUpdateOutput<true, false>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            }
+        } else {
+            if (exact) {
+                gpu::boxConvUpdateOutput<false, true>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            } else {
+                gpu::boxConvUpdateOutput<false, false>(
+                    xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                    xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                    area, input_integrated, output);
+            }
+        }
+    } else {
         if (normalize) {
             if (exact) {
                 cpu::boxConvUpdateOutput<true, true>(

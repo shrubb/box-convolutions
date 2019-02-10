@@ -9,7 +9,7 @@
 
 #include <type_traits>
 
-#define NUM_THREADS 256
+#define BLOCK_SIZE 256
 
 namespace gpu {
 
@@ -86,7 +86,7 @@ void integral_image(at::Tensor & input, at::Tensor & output) {
         // (channels) x (h) x (w) ==> (channels) x (h+1) x (w+1)
         // Note: output[:,:,0] remains uninitialized
         const int totalCols = channels * w;
-        blockSize1D = NUM_THREADS;
+        blockSize1D = BLOCK_SIZE;
         gridSize1D = (totalCols + blockSize1D - 1) / blockSize1D;
         accumulateColsKernel <scalar_t, accscalar_t>
             <<<gridSize1D, blockSize1D, 0, currentStream>>>
@@ -101,7 +101,7 @@ void integral_image(at::Tensor & input, at::Tensor & output) {
         // Compute prefix sums of columns (former rows), `tmpBuffer` -> `tmpBuffer`
         // (w+1) x (channels) x (h+1) ==> (w+1) x (channels) x (h+1)
         const int totalRows = channels * h; // actually, number of cols in (w+1) x (channels * (h+1)) image
-        blockSize1D = NUM_THREADS;
+        blockSize1D = BLOCK_SIZE;
         gridSize1D = (totalRows + blockSize1D - 1) / blockSize1D;
         accumulateColsInplaceTransposedKernel <scalar_t, accscalar_t>
             <<<gridSize1D, blockSize1D, 0, currentStream>>>
@@ -123,7 +123,7 @@ __global__ void accumulateColsKernel(
     // output: (channels * (h+1)) x (w+1) -- first column remains untouched
 
     // global column index (of total `channels * w` columns in this image):
-    const int globalColIdx = NUM_THREADS * blockIdx.x + threadIdx.x;
+    const int globalColIdx = BLOCK_SIZE * blockIdx.x + threadIdx.x;
 
     if (globalColIdx < channels * w) {
         const int channelIdx = globalColIdx / w;
@@ -150,7 +150,7 @@ __global__ void accumulateColsInplaceTransposedKernel(
     // input: (w+1) x (channels * (h+1))
 
     // global column index (of total `channels * w` columns in this image):
-    const int globalColIdx = NUM_THREADS * blockIdx.x + threadIdx.x;
+    const int globalColIdx = BLOCK_SIZE * blockIdx.x + threadIdx.x;
 
     if (globalColIdx < channels * h) {
         const int channelIdx = globalColIdx / h;

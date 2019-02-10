@@ -57,11 +57,6 @@ def test_integral_image(device):
                     % (test_idx, input_image, our_result, reference_result))
 
 def test_box_convolution_module(device):
-    # TODO remove
-    if device == 'cuda':
-        print('Sorry, box conv not yet implemented in CUDA, but will be very soon')
-        return
-
     def explicit_box_kernel(x_min, x_max, y_min, y_max, normalize):
         import math
         h_farthest = math.ceil(max(x_max, -x_min))
@@ -244,7 +239,8 @@ def test_box_convolution_module(device):
             reparametrize(x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w)
 
         # randomly test either sum filter or average filter
-        normalize = random.choice((False, True))
+        # TODO remove `if`
+        normalize = False if device == 'cuda' else random.choice((False, True))
 
         grad_output = (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(
             device, input_image.dtype)
@@ -260,8 +256,11 @@ def test_box_convolution_module(device):
         our_result = box_convolution_wrapper(
             input_image, x_min, x_max, y_min, y_max,
             max_input_h, max_input_w, reparametrization_factor, normalize, exact)
-        our_result.backward(grad_output)
-        our_grad_input = input_image.grad.clone()
+
+        # TODO remove
+        if device != 'cuda':
+            our_result.backward(grad_output)
+            our_grad_input = input_image.grad.clone()
         
         if not our_result.allclose(reference_result, rtol=3e-5, atol=1e-5):
             raise ValueError(
@@ -269,6 +268,10 @@ def test_box_convolution_module(device):
                 'Our output:\n%s\n\nReference output:\n%s\n\nMax diff: %f\n\n'
                     % (test_idx, normalize, input_image, our_result, reference_result, \
                        (our_result - reference_result).abs().max()))
+
+        # TODO remove
+        if device == 'cuda':
+            continue
 
         if not our_grad_input.allclose(reference_grad_input, rtol=3e-5, atol=1e-5):
             raise ValueError(
@@ -327,6 +330,11 @@ if __name__ == '__main__':
         devices += ('cuda',)
 
     for device in devices:
+        # TODO remove
+        if device == 'cuda':
+            print('************** WARNING: ***************')
+            print('CUDA operations not fully implemented yet\n')
+
         print('Testing for device \'%s\'' % device)
         for testing_function in test_integral_image, test_box_convolution_module:
             print('Running %s()...' % testing_function.__name__)

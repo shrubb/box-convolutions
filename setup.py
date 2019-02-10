@@ -13,6 +13,8 @@ source_files_cpp = [
 ]
 source_files_cuda = [
     'integral_image_cuda.cu',
+    'box_convolution_cuda_forward.cu',
+    'box_convolution_cuda_misc.cu'
 ]
 source_files = source_files_cpp + source_files_cuda
 
