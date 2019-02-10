@@ -7,13 +7,13 @@ try:
 except ImportError:
     tqdm = lambda x: x
 
-def test_integral_image():
+def test_integral_image(device):
     # TODO use torch.cumsum
     def integral_image_reference(input):
         assert input.ndimension() >= 2
         h, w = input.shape[-2:]
         output_shape = input.shape[:-2] + (h+1, w+1)
-        output = torch.empty(output_shape, dtype=input.dtype)
+        output = torch.empty(output_shape, dtype=input.dtype, device=input.device)
 
         # zero the 0th columns and rows
         output.select(-2, 0).fill_(0)
@@ -43,8 +43,9 @@ def test_integral_image():
         stride_h, stride_w = 1, 1 # may change in the future
         h, w = random.randint(1+stride_h, 10), random.randint(1+stride_w, 10)
 
-        input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True)
-        grad_output = (torch.rand(batch_size, in_planes, h+1, w+1) < 0.15).to(input_image.dtype)
+        input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True, device=device)
+        grad_output = torch.rand(batch_size, in_planes, h+1, w+1) < 0.15
+        grad_output = grad_output.to(device, input_image.dtype)
 
         reference_result = integral_image_reference(input_image)
         our_result = integral_image(input_image)
@@ -55,13 +56,18 @@ def test_integral_image():
                 'Our output:\n%s\n\nReference output:\n%s\n\n'
                     % (test_idx, input_image, our_result, reference_result))
 
-def test_box_convolution_module():
+def test_box_convolution_module(device):
+    # TODO remove
+    if device == 'cuda':
+        print('Sorry, box conv not yet implemented in CUDA, but will be very soon')
+        return
+
     def explicit_box_kernel(x_min, x_max, y_min, y_max, normalize):
         import math
         h_farthest = math.ceil(max(x_max, -x_min))
         w_farthest = math.ceil(max(y_max, -y_min))
 
-        retval = torch.ones(1+2*h_farthest, 1+2*w_farthest)
+        retval = torch.ones(1+2*h_farthest, 1+2*w_farthest, device=x_min.device)
 
         def segments_intersection(a_l, a_r, b_l, b_r):
             common_l = max(a_l, b_l)
@@ -124,7 +130,7 @@ def test_box_convolution_module():
 
         output_shape = list(input.shape)
         output_shape.insert(2, num_filters)
-        output = torch.empty(output_shape, dtype=input.dtype)
+        output = torch.empty(output_shape, dtype=input.dtype, device=input.device)
 
         for in_sample, out_sample in zip(input, output):
             for in_plane_idx, in_plane_kernels in enumerate(kernels):
@@ -156,7 +162,7 @@ def test_box_convolution_module():
 
         module = BoxConv2d(
             in_planes, num_filters, max_input_h, max_input_w,
-            reparametrization_factor).type(input.dtype)
+            reparametrization_factor).to(input.device, input.dtype)
 
         del module.x_min; module.x_min = x_min
         del module.x_max; module.x_max = x_max
@@ -200,10 +206,11 @@ def test_box_convolution_module():
         reparametrization_w = max_input_w * reparametrization_factor
         gradcheck_step = 0.004
 
-        input_image = torch.rand(batch_size, in_planes, h, w, requires_grad=True)
+        input_image = torch.rand(batch_size, in_planes, h, w, device=device, requires_grad=True)
         
         # sample boxes more or less randomly (algorithm isn't practical but is OK for gradcheck)
-        x_min, x_max, y_min, y_max = (torch.empty(in_planes, num_filters) for _ in range(4))
+        x_min, x_max, y_min, y_max = \
+            (torch.empty(in_planes, num_filters, device=device) for _ in range(4))
         for plane_idx in range(in_planes):
             for filter_idx in range(num_filters):
                 
@@ -239,8 +246,8 @@ def test_box_convolution_module():
         # randomly test either sum filter or average filter
         normalize = random.choice((False, True))
 
-        grad_output = \
-            (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(input_image.dtype)
+        grad_output = (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(
+            device, input_image.dtype)
 
         # check output and grad w.r.t. input vs reference ones
         reference_result = box_convolution_reference(
@@ -314,8 +321,15 @@ if __name__ == '__main__':
     random.seed(seed)
     print('Random seed is %d' % seed)
 
-    for testing_function in test_integral_image, test_box_convolution_module:
-        print('Running %s()...' % testing_function.__name__)
-        # TODO [re]set random state etc.
-        testing_function()
-        print('OK')
+    # TODO add dtypes too
+    devices = ('cpu',)
+    if torch.cuda.is_available():
+        devices += ('cuda',)
+
+    for device in devices:
+        print('Testing for device \'%s\'' % device)
+        for testing_function in test_integral_image, test_box_convolution_module:
+            print('Running %s()...' % testing_function.__name__)
+            # TODO [re]set random state etc.
+            testing_function(device)
+            print('OK')

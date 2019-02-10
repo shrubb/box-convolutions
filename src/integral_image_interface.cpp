@@ -18,7 +18,7 @@ at::Tensor integral_image(at::Tensor input) {
     auto output = at::empty(outputSize, input.options());
 
     if (input.is_cuda()) {
-        THError("NYI: GPU integral_image_forward");
+        gpu::integral_image(input, output);
     } else {
         cpu::integral_image(input, output);
     }
