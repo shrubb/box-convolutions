@@ -4,6 +4,8 @@
 #include <ATen/AccumulateType.h>
 #include <TH/THGeneral.h>
 
+
+
 #include <box_convolution.h>
 
 at::Tensor integral_image(at::Tensor input);
@@ -54,7 +56,7 @@ at::Tensor box_convolution_forward(
             xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
         if (normalize) {
-            // area = gpu::computeArea(x_min, x_max, y_min, y_max, exact);
+            area = gpu::computeArea(x_min, x_max, y_min, y_max, exact);
         }
     } else {
         cpu::splitParameters(
@@ -205,8 +207,13 @@ std::vector<at::Tensor> box_convolution_backward(
         at::Tensor area; // box area for normalization
 
         if (gradInput.is_cuda()) {
+            gpu::splitParametersUpdateGradInput(
+                x_min   , x_max   , y_min   , y_max   ,
+                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
+
             if (normalize) {
-                THError("NYI: gpu::computeArea");
+                area = cpu::computeArea(x_min, x_max, y_min, y_max, exact);
             }
 
             THError("NYI: gpu::boxConvUpdateGradInput");
@@ -267,10 +274,13 @@ std::vector<at::Tensor> box_convolution_backward(
         tmpArray = at::empty({batchSize, nInputPlanes, numFilters, h, w}, x_min.options());
 
         if (x_min.is_cuda()) {
-            THError("NYI: gpu::splitParameters");
+            gpu::splitParametersAccGradParameters(
+                x_min   , x_max   , y_min   , y_max   ,
+                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
             if (normalize) {
-                THError("NYI: gpu::computeArea");
+                area = gpu::computeArea(x_min, x_max, y_min, y_max, exact);
             }
         } else {
             cpu::splitParametersAccGradParameters(
@@ -329,7 +339,8 @@ std::vector<at::Tensor> box_convolution_backward(
                     const bool needYDeriv = not needXDeriv;
 
                     if (x_min.is_cuda()) {
-                        THError("NYI: gpu::computeArea");
+                        area = gpu::computeArea(
+                            x_min, x_max, y_min, y_max, exact, needXDeriv, needYDeriv);
                     } else {
                         area = cpu::computeArea(
                             x_min, x_max, y_min, y_max, exact, needXDeriv, needYDeriv);
@@ -368,7 +379,8 @@ void clip_parameters(
     const float minHeight = exact ? 1.001f : 2.001f;
 
     if (x_min.is_cuda()) {
-        THError("NYI: gpu::clip_parameters");
+        gpu::clipParameters(x_min, x_max, reparametrization_h, minHeight, max_input_h);
+        gpu::clipParameters(y_min, y_max, reparametrization_w, minWidth , max_input_w);
     } else {
         cpu::clipParameters(x_min, x_max, reparametrization_h, minHeight, max_input_h);
         cpu::clipParameters(y_min, y_max, reparametrization_w, minWidth , max_input_w);

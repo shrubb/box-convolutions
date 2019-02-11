@@ -731,7 +731,7 @@ template void boxConvAccGradParameters<false>(
 
 
 void clipParameters(
-    at::Tensor paramMin, at::Tensor paramMax,
+    at::Tensor & paramMin, at::Tensor & paramMax,
     const double reparametrization, const double minSize, const double maxSize) {
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.type(), "cpu::clipParameters", ([&] {

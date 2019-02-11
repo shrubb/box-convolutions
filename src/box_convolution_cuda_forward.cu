@@ -238,7 +238,8 @@ void boxConvUpdateOutput(
         auto areaAcsr = xMinFracAcsr; // because there's no default ctor :(
         // only initialize the accessor if `area` is defined (errors otherwise)
         if (normalize) {
-            areaAcsr = area.packed_accessor<scalar_t, 1, at::RestrictPtrTraits, int32_t>();
+            auto areaFlat = area.view(-1);
+            areaAcsr = areaFlat.packed_accessor<scalar_t, 1, at::RestrictPtrTraits, int32_t>();
         }
 
         auto inputIntFlattened = input_integrated.view({-1, h+1, w+1});

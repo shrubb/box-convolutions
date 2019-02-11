@@ -239,8 +239,7 @@ def test_box_convolution_module(device):
             reparametrize(x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w)
 
         # randomly test either sum filter or average filter
-        # TODO remove `if`
-        normalize = False if device == 'cuda' else random.choice((False, True))
+        normalize = random.choice((False, True))
 
         grad_output = (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(
             device, input_image.dtype)

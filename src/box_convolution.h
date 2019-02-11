@@ -37,8 +37,8 @@ void boxConvAccGradParameters(
     at::Tensor & input_integrated, at::Tensor & tmpArray, Parameter parameter);
 
 void clipParameters(
-    at::Tensor paramMin, at::Tensor paramMax,
-    const double reparametrization_h, const double minSizeFloat, const double maxSizeFloat);
+    at::Tensor & paramMin, at::Tensor & paramMax,
+    const double reparametrization, const double minSize, const double maxSize);
 
 at::Tensor computeArea(
     at::Tensor x_min, at::Tensor x_max, at::Tensor y_min, at::Tensor y_max,
@@ -83,8 +83,8 @@ void boxConvAccGradParameters(
     at::Tensor & input_integrated, at::Tensor & tmpArray, Parameter parameter);
 
 void clipParameters(
-    at::Tensor paramMin, at::Tensor paramMax,
-    const double reparametrization_h, const double minSizeFloat, const double maxSizeFloat);
+    at::Tensor & paramMin, at::Tensor & paramMax,
+    const double reparametrization, const double minSize, const double maxSize);
 
 at::Tensor computeArea(
     at::Tensor x_min, at::Tensor x_max, at::Tensor y_min, at::Tensor y_max,
