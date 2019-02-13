@@ -255,11 +255,8 @@ def test_box_convolution_module(device):
         our_result = box_convolution_wrapper(
             input_image, x_min, x_max, y_min, y_max,
             max_input_h, max_input_w, reparametrization_factor, normalize, exact)
-
-        # TODO remove
-        if device != 'cuda':
-            our_result.backward(grad_output)
-            our_grad_input = input_image.grad.clone()
+        our_result.backward(grad_output)
+        our_grad_input = input_image.grad.clone()
         
         if not our_result.allclose(reference_result, rtol=3e-5, atol=1e-5):
             raise ValueError(
@@ -267,10 +264,6 @@ def test_box_convolution_module(device):
                 'Our output:\n%s\n\nReference output:\n%s\n\nMax diff: %f\n\n'
                     % (test_idx, normalize, input_image, our_result, reference_result, \
                        (our_result - reference_result).abs().max()))
-
-        # TODO remove
-        if device == 'cuda':
-            continue
 
         if not our_grad_input.allclose(reference_grad_input, rtol=3e-5, atol=1e-5):
             raise ValueError(
@@ -280,6 +273,10 @@ def test_box_convolution_module(device):
                     % (test_idx, normalize, input_image, our_result, \
                        grad_output, our_grad_input, reference_grad_input, \
                        (our_grad_input-reference_grad_input).abs().max()))
+
+        # TODO remove
+        if device == 'cuda':
+            continue
 
         # sorry, I don't want to reliably check gradients w.r.t. parameters in rounded mode
         if not exact:

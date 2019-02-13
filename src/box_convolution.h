@@ -25,7 +25,6 @@ void boxConvUpdateOutput(
 
 template <bool normalize, bool exact>
 void boxConvUpdateGradInput(
-	at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & area, at::Tensor & grad_output_integrated, at::Tensor & tmpArray);
@@ -71,7 +70,6 @@ void boxConvUpdateOutput(
 
 template <bool normalize, bool exact>
 void boxConvUpdateGradInput(
-    at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & area, at::Tensor & grad_output_integrated, at::Tensor & tmpArray);

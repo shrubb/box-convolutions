@@ -89,7 +89,7 @@ __global__ void splitParametersUpdateGradInputKernel(
         scalar_t *fracParam;
         int32_t *intParam;
 
-        param     = idx < nParameters ? xMin     : yMin;
+        param     = idx < nParameters ? xMax     : yMax; // note: min/max swapped
         fracParam = idx < nParameters ? xMinFrac : yMinFrac;
         intParam  = idx < nParameters ? xMinInt  : yMinInt;
 
@@ -97,7 +97,7 @@ __global__ void splitParametersUpdateGradInputKernel(
         fracParam[paramIndex] = minInt + param[paramIndex];
         intParam[paramIndex] = static_cast<int32_t>(minInt);
 
-        param     = idx < nParameters ? xMax     : yMax;
+        param     = idx < nParameters ? xMin     : yMin; // note: min/max swapped
         fracParam = idx < nParameters ? xMaxFrac : yMaxFrac;
         intParam  = idx < nParameters ? xMaxInt  : yMaxInt;
 

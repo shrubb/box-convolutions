@@ -217,6 +217,7 @@ void boxConvUpdateOutput(
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "gpu::boxConvUpdateOutput", ([&] {
 
+        // TODO pass raw pointers instead
         auto xMinIntFlat = xMinInt.view(-1);
         auto xMaxIntFlat = xMaxInt.view(-1);
         auto yMinIntFlat = yMinInt.view(-1);

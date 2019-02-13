@@ -199,28 +199,49 @@ std::vector<at::Tensor> box_convolution_backward(
 
     if (input_needs_grad) {
         at::Tensor grad_output_integrated = integral_image(grad_output);
-
         at::Tensor tmpArray = at::empty(
             {batchSize, nInputPlanes, numFilters, h, w}, grad_output.options());
         CHECK_CONTIGUOUS(tmpArray);
 
         at::Tensor area; // box area for normalization
 
-        if (gradInput.is_cuda()) {
+        if (grad_output_integrated.is_cuda()) {
             gpu::splitParametersUpdateGradInput(
-                x_min   , x_max   , y_min   , y_max   ,
-                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                x_min,    x_max,    y_min,    y_max,
+                xMinInt,  xMaxInt,  yMinInt,  yMaxInt,
                 xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
             if (normalize) {
-                area = cpu::computeArea(x_min, x_max, y_min, y_max, exact);
-            }
+                area = gpu::computeArea(x_min, x_max, y_min, y_max, exact);
 
-            THError("NYI: gpu::boxConvUpdateGradInput");
+                if (exact) {
+                    gpu::boxConvUpdateGradInput<true, true>(
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                } else {
+                    gpu::boxConvUpdateGradInput<true, false>(
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                }
+            } else {
+                if (exact) {
+                    gpu::boxConvUpdateGradInput<false, true>(
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                } else {
+                    gpu::boxConvUpdateGradInput<false, false>(
+                        xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                        xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                        area, grad_output_integrated, tmpArray);
+                }
+            }
         } else {
             cpu::splitParametersUpdateGradInput(
-                x_min   , x_max   , y_min   , y_max   ,
-                xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                x_min,    x_max,    y_min,    y_max,
+                xMinInt, xMaxInt, yMinInt, yMaxInt,
                 xMinFrac, xMaxFrac, yMinFrac, yMaxFrac);
 
             if (normalize) {
@@ -228,13 +249,11 @@ std::vector<at::Tensor> box_convolution_backward(
 
                 if (exact) {
                     cpu::boxConvUpdateGradInput<true, true>(
-                        x_min, x_max, y_min, y_max,
                         xMinInt , xMaxInt , yMinInt , yMaxInt ,
                         xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
                         area, grad_output_integrated, tmpArray);
                 } else {
                     cpu::boxConvUpdateGradInput<true, false>(
-                        x_min, x_max, y_min, y_max,
                         xMinInt , xMaxInt , yMinInt , yMaxInt ,
                         xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
                         area, grad_output_integrated, tmpArray);
@@ -242,13 +261,11 @@ std::vector<at::Tensor> box_convolution_backward(
             } else {
                 if (exact) {
                     cpu::boxConvUpdateGradInput<false, true>(
-                        x_min, x_max, y_min, y_max,
                         xMinInt , xMaxInt , yMinInt , yMaxInt ,
                         xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
                         area, grad_output_integrated, tmpArray);
                 } else {
                     cpu::boxConvUpdateGradInput<false, false>(
-                        x_min, x_max, y_min, y_max,
                         xMinInt , xMaxInt , yMinInt , yMaxInt ,
                         xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
                         area, grad_output_integrated, tmpArray);

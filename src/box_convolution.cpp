@@ -286,7 +286,6 @@ template void boxConvUpdateOutput<false, false>(
 // `tmpArray` size: {batchSize, nInputPlanes, numFilters, h, w}
 template <bool normalize, bool exact>
 void boxConvUpdateGradInput(
-    at::Tensor & x_min   , at::Tensor & x_max   , at::Tensor & y_min   , at::Tensor & y_max   ,
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & area, at::Tensor & grad_output_integrated, at::Tensor & tmpArray) {
@@ -460,11 +459,9 @@ void boxConvUpdateGradInput(
 template void boxConvUpdateGradInput<true, true>(
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
-    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
 
 template void boxConvUpdateGradInput<false, true>(
-    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
@@ -472,11 +469,9 @@ template void boxConvUpdateGradInput<false, true>(
 template void boxConvUpdateGradInput<true, false>(
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
-    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
 
 template void boxConvUpdateGradInput<false, false>(
-    at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
