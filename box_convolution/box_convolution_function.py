@@ -42,7 +42,6 @@ class BoxConvolutionFunction(torch.autograd.Function):
             x_min, x_max, y_min, y_max, reparametrization_h, reparametrization_w, inverse=True)
 
         input_integrated = cpp_cuda.integral_image(input)
-        
         output = cpp_cuda.box_convolution_forward(
             input_integrated, x_min, x_max, y_min, y_max, normalize, exact)
 

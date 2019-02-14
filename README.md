@@ -7,17 +7,9 @@ Box Convolution Layer for ConvNets
 Single-box-conv network (from `test-mnist.py`) learns patterns on MNIST
 </p>
 
-# Work in Progress
-
-**Sorry, the code isn't ready yet** :slightly_frowning_face: I intend to finish porting the layer to PyTorch in early January.
-
-CPU version is out. GPU will be there soon.
-
-<sup>If you are REALLY curious, the actual implementation used for experiments can be found [here](https://github.com/shrubb/integral-layer). But please, please, don't use it. It's undocumented and is in Torch7 (Lua).<sup>
-
 # What This Is
 
-This will be a PyTorch implementation of the box convolution layer as introduced in the 2018 NeurIPS [paper](https://papers.nips.cc/paper/7859-deep-neural-networks-with-box-convolutions):
+This is a PyTorch implementation of the box convolution layer as introduced in the 2018 NeurIPS [paper](https://papers.nips.cc/paper/7859-deep-neural-networks-with-box-convolutions):
 
 Burkov, E., & Lempitsky, V. (2018) **Deep Neural Networks with Box Convolutions**. *Advances in Neural Information Processing Systems 31*, 6214-6224.
 
@@ -43,10 +35,11 @@ pip3 uninstall box_convolution
 import torch
 from box_convolution import BoxConv2d
 
+box_conv = BoxConv2d(16, 8, 240, 320)
 help(BoxConv2d)
 ```
 
-There is a usage example in `test-mnist.py`.
+Also, there is a usage example in `test-mnist.py`.
 
 Tested on Ubuntu 18.04 with Python 3.6 and PyTorch 1.0.0.
 

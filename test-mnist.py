@@ -35,6 +35,7 @@ except ImportError:
     box_video = None
     print('Couldn\'t import OpenCV. Will not log boxes to a video file')
 
+
 def train(model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -97,13 +98,13 @@ def test(model, device, test_loader):
 
 def main():
     # Training settings
-    use_cuda = False
+    use_cuda = torch.cuda.is_available()
     batch_size = 64
     n_epochs = 10
 
     torch.manual_seed(666)
 
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = torch.device('cuda' if use_cuda else 'cpu')
 
     mnist_train = datasets.MNIST(
         './', train=True, download=True,

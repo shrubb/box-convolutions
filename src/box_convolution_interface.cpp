@@ -18,6 +18,9 @@ at::Tensor box_convolution_forward(
     at::Tensor y_min, at::Tensor y_max,
     const bool normalize, const bool exact) {
 
+    AT_CHECK(input_integrated.device() == x_min.device(),
+        "BoxConv2d: input and parameters are on different devices")
+
     CHECK_CONTIGUOUS(input_integrated);
     AT_CHECK(input_integrated.dim() == 4, "box conv input must have 4 dimensions");
     AT_CHECK(
@@ -315,7 +318,17 @@ std::vector<at::Tensor> box_convolution_backward(
                 const Parameter paramId = static_cast<Parameter>(paramIdx);
 
                 if (input_integrated.is_cuda()) {
-                    THError("NYI: gpu::boxConvAccGradParameters");
+                    if (exact) {
+                        gpu::boxConvAccGradParameters<true>(
+                            xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                            xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                            input_integrated, tmpArray, paramId);
+                    } else {
+                        gpu::boxConvAccGradParameters<false>(
+                            xMinInt , xMaxInt , yMinInt , yMaxInt ,
+                            xMinFrac, xMaxFrac, yMinFrac, yMaxFrac,
+                            input_integrated, tmpArray, paramId);
+                    }
                 } else {
                     if (exact) {
                         cpu::boxConvAccGradParameters<true>(

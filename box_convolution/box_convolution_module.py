@@ -120,7 +120,7 @@ class BoxConv2d(torch.nn.Module):
         weights_shape = (len(channels), self.num_filters)
         if weights is None:
             weights = np.ones(weights_shape)
-        weights = np.array(weights, dtype=np.float32).reshape(weights_shape)
+        weights = weights.cpu().float().numpy().reshape(weights_shape)
         weights.clip(0.01, 1.0, out=weights)
         
         retval = np.zeros(resolution + (3,), dtype=np.uint8)

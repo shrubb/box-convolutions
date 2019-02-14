@@ -8,7 +8,7 @@ except ImportError:
     tqdm = lambda x: x
 
 def test_integral_image(device):
-    # TODO use torch.cumsum
+    # or use torch.cumsum
     def integral_image_reference(input):
         assert input.ndimension() >= 2
         h, w = input.shape[-2:]
@@ -157,7 +157,7 @@ def test_box_convolution_module(device):
 
         module = BoxConv2d(
             in_planes, num_filters, max_input_h, max_input_w,
-            reparametrization_factor).to(input.device, input.dtype)
+            reparametrization_factor).to(input)
 
         del module.x_min; module.x_min = x_min
         del module.x_max; module.x_max = x_max
@@ -241,8 +241,7 @@ def test_box_convolution_module(device):
         # randomly test either sum filter or average filter
         normalize = random.choice((False, True))
 
-        grad_output = (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(
-            device, input_image.dtype)
+        grad_output = (torch.rand(batch_size, in_planes*num_filters, h, w) < 0.15).to(input_image)
 
         # check output and grad w.r.t. input vs reference ones
         reference_result = box_convolution_reference(
@@ -273,10 +272,6 @@ def test_box_convolution_module(device):
                     % (test_idx, normalize, input_image, our_result, \
                        grad_output, our_grad_input, reference_grad_input, \
                        (our_grad_input-reference_grad_input).abs().max()))
-
-        # TODO remove
-        if device == 'cuda':
-            continue
 
         # sorry, I don't want to reliably check gradients w.r.t. parameters in rounded mode
         if not exact:
@@ -326,11 +321,6 @@ if __name__ == '__main__':
         devices += ('cuda',)
 
     for device in devices:
-        # TODO remove
-        if device == 'cuda':
-            print('************** WARNING: ***************')
-            print('CUDA operations not fully implemented yet\n')
-
         print('Testing for device \'%s\'' % device)
         for testing_function in test_integral_image, test_box_convolution_module:
             print('Running %s()...' % testing_function.__name__)

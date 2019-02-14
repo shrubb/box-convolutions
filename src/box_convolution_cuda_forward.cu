@@ -27,17 +27,20 @@ using CudaAcsr = const at::PackedTensorAccessor<T, N, at::RestrictPtrTraits, int
 // overload for "truncated"/"rounded" mode
 template <bool normalize, typename scalar_t>
 __global__ void boxConvUpdateOutputKernel(
-    CudaAcsr<scalar_t,3> inputInt, CudaAcsr<scalar_t,3> output  ,
-    CudaAcsr<int32_t ,1> xMinInt , CudaAcsr<int32_t ,1> xMaxInt ,
-    CudaAcsr<int32_t ,1> yMinInt , CudaAcsr<int32_t ,1> yMaxInt ,
-    CudaAcsr<scalar_t,1> area) {
+    CudaAcsr<scalar_t,3> inputInt, CudaAcsr<scalar_t,5> output,
+    const int32_t * __restrict__ xMinInt, const int32_t * __restrict__ xMaxInt,
+    const int32_t * __restrict__ yMinInt, const int32_t * __restrict__ yMaxInt,
+    const scalar_t * __restrict__ area) {
 
+    // `output` size: `batch_size x in_planes x num_filters x h x w`
     const int32_t y = blockDim.x * blockIdx.x + threadIdx.x;
     const int32_t x = blockDim.y * blockIdx.y + threadIdx.y;
-    const int32_t inPlaneIdx = blockIdx.z / xMinInt.size(1);
-    const int32_t paramIdx = blockIdx.z % (xMinInt.size(0) * xMinInt.size(1));
-    const int32_t h = output.size(1);
-    const int32_t w = output.size(2);
+    const int32_t inPlaneIdx = blockIdx.z / output.size(2);
+    const int32_t paramIdx = blockIdx.z % (output.size(1) * output.size(2));
+    const int32_t h = output.size(3);
+    const int32_t w = output.size(4);
+
+    const auto inputIntPlane = inputInt[inPlaneIdx];
 
     if (x < h and y < w) {
         // Must add 1 to xMax/yMax/xMin/yMin due to OpenCV's
@@ -55,10 +58,10 @@ __global__ void boxConvUpdateOutputKernel(
 
         scalar_t outValue = 0;
 
-        outValue += inputInt[inPlaneIdx][b][r];
-        outValue -= inputInt[inPlaneIdx][t][r];
-        outValue -= inputInt[inPlaneIdx][b][l];
-        outValue += inputInt[inPlaneIdx][t][l];
+        outValue += inputIntPlane[b][r];
+        outValue -= inputIntPlane[t][r];
+        outValue -= inputIntPlane[b][l];
+        outValue += inputIntPlane[t][l];
 
         // TODO error: expression must be a modifiable lvalue
         output.data()[(blockIdx.z * h + x) * w + y] =
@@ -69,19 +72,21 @@ __global__ void boxConvUpdateOutputKernel(
 // overload for "exact" mode
 template <bool normalize, typename scalar_t>
 __global__ void boxConvUpdateOutputKernel(
-    CudaAcsr<scalar_t,3> inputInt, CudaAcsr<scalar_t,3> output  ,
-    CudaAcsr<int32_t ,1> xMinInt , CudaAcsr<int32_t ,1> xMaxInt ,
-    CudaAcsr<int32_t ,1> yMinInt , CudaAcsr<int32_t ,1> yMaxInt ,
-    CudaAcsr<scalar_t,1> xMinFrac, CudaAcsr<scalar_t,1> xMaxFrac,
-    CudaAcsr<scalar_t,1> yMinFrac, CudaAcsr<scalar_t,1> yMaxFrac,
-    CudaAcsr<scalar_t,1> area) {
+    CudaAcsr<scalar_t,3> inputInt, CudaAcsr<scalar_t,5> output,
+    const int32_t * __restrict__ xMinInt,  const int32_t * __restrict__ xMaxInt,
+    const int32_t * __restrict__ yMinInt,  const int32_t * __restrict__ yMaxInt,
+    const scalar_t * __restrict__ xMinFrac, const scalar_t * __restrict__ xMaxFrac,
+    const scalar_t * __restrict__ yMinFrac, const scalar_t * __restrict__ yMaxFrac,
+    const scalar_t * __restrict__ area) {
 
     const int32_t y = blockDim.x * blockIdx.x + threadIdx.x;
     const int32_t x = blockDim.y * blockIdx.y + threadIdx.y;
-    const int32_t inPlaneIdx = blockIdx.z / xMinInt.size(1);
-    const int32_t paramIdx = blockIdx.z % (xMinInt.size(0) * xMinInt.size(1));
-    const int32_t h = output.size(1);
-    const int32_t w = output.size(2);
+    const int32_t inPlaneIdx = blockIdx.z / output.size(2);
+    const int32_t paramIdx = blockIdx.z % (output.size(1) * output.size(2));
+    const int32_t h = output.size(3);
+    const int32_t w = output.size(4);
+
+    const auto inputIntPlane = inputInt[inPlaneIdx];
 
     if (x < h and y < w) {
         // Must add 1 to xMax/yMax/xMin/yMin due to OpenCV's
@@ -115,38 +120,38 @@ __global__ void boxConvUpdateOutputKernel(
 
         // -- main area
         outValue = 
-              inputInt[inPlaneIdx][b][r]
-            - inputInt[inPlaneIdx][t][r]
-            - inputInt[inPlaneIdx][b][l]
-            + inputInt[inPlaneIdx][t][l];
+              inputIntPlane[b][r]
+            - inputIntPlane[t][r]
+            - inputIntPlane[b][l]
+            + inputIntPlane[t][l];
 
         // -- xMax border
         outValue +=
-            ( inputInt[inPlaneIdx][bAdv][r]
-            - inputInt[inPlaneIdx][b   ][r]
-            - inputInt[inPlaneIdx][bAdv][l]
-            + inputInt[inPlaneIdx][b   ][l]) * xMaxCurrFrac;
+            ( inputIntPlane[bAdv][r]
+            - inputIntPlane[b   ][r]
+            - inputIntPlane[bAdv][l]
+            + inputIntPlane[b   ][l]) * xMaxCurrFrac;
 
         // -- yMax border
         outValue +=
-            ( inputInt[inPlaneIdx][b][rAdv]
-            - inputInt[inPlaneIdx][b][r   ]
-            - inputInt[inPlaneIdx][t][rAdv]
-            + inputInt[inPlaneIdx][t][r   ]) * yMaxCurrFrac;
+            ( inputIntPlane[b][rAdv]
+            - inputIntPlane[b][r   ]
+            - inputIntPlane[t][rAdv]
+            + inputIntPlane[t][r   ]) * yMaxCurrFrac;
 
         // -- xMin border
         outValue +=
-            ( inputInt[inPlaneIdx][t   ][r]
-            - inputInt[inPlaneIdx][tAdv][r]
-            - inputInt[inPlaneIdx][t   ][l]
-            + inputInt[inPlaneIdx][tAdv][l]) * xMinCurrFrac;
+            ( inputIntPlane[t   ][r]
+            - inputIntPlane[tAdv][r]
+            - inputIntPlane[t   ][l]
+            + inputIntPlane[tAdv][l]) * xMinCurrFrac;
 
         // -- yMin border
         outValue +=
-            ( inputInt[inPlaneIdx][b][l   ]
-            - inputInt[inPlaneIdx][b][lAdv]
-            - inputInt[inPlaneIdx][t][l   ]
-            + inputInt[inPlaneIdx][t][lAdv]) * yMinCurrFrac;
+            ( inputIntPlane[b][l   ]
+            - inputIntPlane[b][lAdv]
+            - inputIntPlane[t][l   ]
+            + inputIntPlane[t][lAdv]) * yMinCurrFrac;
 
         // -- corner pixels
         // Note: before, I used plain `input` to access corner values
@@ -156,40 +161,40 @@ __global__ void boxConvUpdateOutputKernel(
                  (x+xMaxCurr <  0) | (y+yMaxCurr <  0))) {
             outValue += 
                 xMaxCurrFrac * yMaxCurrFrac *
-                ( inputInt[inPlaneIdx][b+1][r+1]
-                - inputInt[inPlaneIdx][b  ][r+1]
-                - inputInt[inPlaneIdx][b+1][r  ]
-                + inputInt[inPlaneIdx][b  ][r  ]);
+                ( inputIntPlane[b+1][r+1]
+                - inputIntPlane[b  ][r+1]
+                - inputIntPlane[b+1][r  ]
+                + inputIntPlane[b  ][r  ]);
         }
 
         if (not ((x+xMinCurr >  h) | (y+yMaxCurr >= w) |
                  (x+xMinCurr <= 0) | (y+yMaxCurr <  0))) {
             outValue +=
                 xMinCurrFrac * yMaxCurrFrac *
-                ( inputInt[inPlaneIdx][t  ][r+1]
-                - inputInt[inPlaneIdx][t-1][r+1]
-                - inputInt[inPlaneIdx][t  ][r  ]
-                + inputInt[inPlaneIdx][t-1][r  ]);
+                ( inputIntPlane[t  ][r+1]
+                - inputIntPlane[t-1][r+1]
+                - inputIntPlane[t  ][r  ]
+                + inputIntPlane[t-1][r  ]);
         }
 
         if (not ((x+xMaxCurr >= h) | (y+yMinCurr >  w) |
                  (x+xMaxCurr <  0) | (y+yMinCurr <= 0))) {
             outValue +=
                 xMaxCurrFrac * yMinCurrFrac *
-                ( inputInt[inPlaneIdx][b+1][l  ]
-                - inputInt[inPlaneIdx][b  ][l  ]
-                - inputInt[inPlaneIdx][b+1][l-1]
-                + inputInt[inPlaneIdx][b  ][l-1]);
+                ( inputIntPlane[b+1][l  ]
+                - inputIntPlane[b  ][l  ]
+                - inputIntPlane[b+1][l-1]
+                + inputIntPlane[b  ][l-1]);
         }
 
         if (not ((x+xMinCurr >  h) | (y+yMinCurr >  w) |
                  (x+xMinCurr <= 0) | (y+yMinCurr <= 0))) {
             outValue +=
                 xMinCurrFrac * yMinCurrFrac *
-                ( inputInt[inPlaneIdx][t  ][l  ]
-                - inputInt[inPlaneIdx][t-1][l  ]
-                - inputInt[inPlaneIdx][t  ][l-1]
-                + inputInt[inPlaneIdx][t-1][l-1]);
+                ( inputIntPlane[t  ][l  ]
+                - inputIntPlane[t-1][l  ]
+                - inputIntPlane[t  ][l-1]
+                + inputIntPlane[t-1][l-1]);
         }
 
         // TODO error: expression must be a modifiable lvalue
@@ -216,54 +221,29 @@ void boxConvUpdateOutput(
         (totalOutputChannels  + blockSize.z - 1) / blockSize.z);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "gpu::boxConvUpdateOutput", ([&] {
-
-        // TODO pass raw pointers instead
-        auto xMinIntFlat = xMinInt.view(-1);
-        auto xMaxIntFlat = xMaxInt.view(-1);
-        auto yMinIntFlat = yMinInt.view(-1);
-        auto yMaxIntFlat = yMaxInt.view(-1);
-        auto xMinIntAcsr = xMinIntFlat.packed_accessor<int32_t, 1, at::RestrictPtrTraits, int32_t>();
-        auto xMaxIntAcsr = xMaxIntFlat.packed_accessor<int32_t, 1, at::RestrictPtrTraits, int32_t>();
-        auto yMinIntAcsr = yMinIntFlat.packed_accessor<int32_t, 1, at::RestrictPtrTraits, int32_t>();
-        auto yMaxIntAcsr = yMaxIntFlat.packed_accessor<int32_t, 1, at::RestrictPtrTraits, int32_t>();
-
-        auto xMinFracFlat = xMinFrac.view(-1);
-        auto xMaxFracFlat = xMaxFrac.view(-1);
-        auto yMinFracFlat = yMinFrac.view(-1);
-        auto yMaxFracFlat = yMaxFrac.view(-1);
-        auto xMinFracAcsr = xMinFracFlat.packed_accessor<scalar_t, 1, at::RestrictPtrTraits, int32_t>();
-        auto xMaxFracAcsr = xMaxFracFlat.packed_accessor<scalar_t, 1, at::RestrictPtrTraits, int32_t>();
-        auto yMinFracAcsr = yMinFracFlat.packed_accessor<scalar_t, 1, at::RestrictPtrTraits, int32_t>();
-        auto yMaxFracAcsr = yMaxFracFlat.packed_accessor<scalar_t, 1, at::RestrictPtrTraits, int32_t>();
         
-        auto areaAcsr = xMinFracAcsr; // because there's no default ctor :(
-        // only initialize the accessor if `area` is defined (errors otherwise)
-        if (normalize) {
-            auto areaFlat = area.view(-1);
-            areaAcsr = areaFlat.packed_accessor<scalar_t, 1, at::RestrictPtrTraits, int32_t>();
-        }
-
         auto inputIntFlattened = input_integrated.view({-1, h+1, w+1});
         auto inputIntAcsr =
             inputIntFlattened.packed_accessor<scalar_t, 3, at::RestrictPtrTraits, int32_t>();
             
-        auto outputFlattened = output.view({-1, h, w});
-        auto outputAcsr = 
-            outputFlattened.packed_accessor<scalar_t, 3, at::RestrictPtrTraits, int32_t>();
+        auto outputAcsr = output.packed_accessor<scalar_t, 5, at::RestrictPtrTraits, int32_t>();
 
         if (exact) {
             boxConvUpdateOutputKernel <normalize>
                 <<<gridSize, blockSize, 0, at::cuda::getCurrentCUDAStream()>>> (
                 inputIntAcsr, outputAcsr,
-                xMinIntAcsr , xMaxIntAcsr , yMinIntAcsr , yMaxIntAcsr,
-                xMinFracAcsr, xMaxFracAcsr, yMinFracAcsr, yMaxFracAcsr,
-                areaAcsr);
+                xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
+                yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
+                xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
+                yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(),
+                normalize ? area.data<scalar_t>() : nullptr);
         } else {
             boxConvUpdateOutputKernel <normalize>
                 <<<gridSize, blockSize, 0, at::cuda::getCurrentCUDAStream()>>> (
                 inputIntAcsr, outputAcsr,
-                xMinIntAcsr, xMaxIntAcsr, yMinIntAcsr, yMaxIntAcsr,
-                areaAcsr);
+                xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
+                yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
+                normalize ? area.data<scalar_t>() : nullptr);
         }
         THCudaCheck(cudaGetLastError());
     }));
