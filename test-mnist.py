@@ -1,4 +1,9 @@
-# Based on https://github.com/pytorch/examples/blob/master/mnist/main.py
+"""
+    This script trains a very simple box convnet on MNIST.
+    If OpenCV `videoio` is available, also outputs an animation
+    of boxes' evolution to 'mnist-boxes.avi'.
+    Based on https://github.com/pytorch/examples/blob/master/mnist/main.py
+"""
 from __future__ import print_function
 import argparse
 import torch
@@ -18,6 +23,7 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(7*7*40, 10)
 
     def forward(self, x):
+        # The following line computes responses to 40 "generalized Haar filters"
         x = self.conv1_1x1(self.conv1(x))
         x = F.relu(F.max_pool2d(x, 4))
 
