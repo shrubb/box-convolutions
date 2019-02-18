@@ -19,7 +19,7 @@ Burkov, E., & Lempitsky, V. (2018) **Deep Neural Networks with Box Convolutions*
 
 ```bash
 git clone https://github.com/shrubb/box-convolutions.git && cd box-convolutions
-pip3 install --user .
+python3 -m pip install .
 python3 -m box_convolution.test # if throws errors, please open a GitHub issue
 ```
 
@@ -41,7 +41,7 @@ help(BoxConv2d)
 
 Also, there is a usage example in `test-mnist.py`.
 
-Tested on Ubuntu 18.04.2, Python 3.6, PyTorch 1.0.0, GCC 7.3.0, CUDA 9.2. Other versions (e.g. Python 2.7 or PyTorch 0.4 or GCC 5 or CUDA 8 or CUDA 10) should work too, but I haven't checked. If something doesn't build, please open an issue.
+Tested on Ubuntu 18.04.2, Python 3.6, PyTorch 1.0.0, GCC 7.3.0, CUDA 9.2. Other versions (e.g. Python 2.7 or GCC 5 or CUDA 8 or CUDA 10) should work too, but I haven't checked. If something doesn't build, please open an issue.
 
 CUDA 9/9.1 + GCC 6 isn't supported, see [this issue](https://github.com/shrubb/box-convolutions/issues/2).
 

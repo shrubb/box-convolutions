@@ -37,7 +37,7 @@ at::Tensor box_convolution_forward(
 
     // Split x_min, x_max, y_min, y_max into integer and fractional parts
     // TODO how to force is_variable(false)? How to set is_variable on an existing tensor?
-    auto intOptions = x_min.options().is_variable(true).dtype(caffe2::TypeMeta::Make<int>());
+    auto intOptions = x_min.options().is_variable(true).dtype(at::ScalarType::Int);
     auto xMinInt = at::empty(x_min.sizes(), intOptions);
     auto xMaxInt = at::empty(x_min.sizes(), intOptions);
     auto yMinInt = at::empty(x_min.sizes(), intOptions);
@@ -188,7 +188,7 @@ std::vector<at::Tensor> box_convolution_backward(
 
     // Allocate memory for splitting x_min, x_max, y_min, y_max into integer and fractional parts
     // TODO how to force is_variable(false)? How to set is_variable on an existing tensor?
-    auto intOptions = x_min.options().is_variable(true).dtype(caffe2::TypeMeta::Make<int>());
+    auto intOptions = x_min.options().is_variable(true).dtype(at::ScalarType::Int);
     auto xMinInt = at::empty(x_min.sizes(), intOptions);
     auto xMaxInt = at::empty(x_min.sizes(), intOptions);
     auto yMinInt = at::empty(x_min.sizes(), intOptions);
