@@ -4,7 +4,7 @@ Box Convolution Layer for ConvNets
 <p align="center">
 <img src="https://user-images.githubusercontent.com/9570420/52168173-d1ea7980-2737-11e9-8924-e4e8fd39d0ee.gif">
 <br>
-Single-box-conv network (from `test-mnist.py`) learns patterns on MNIST
+Single-box-conv network (from `examples/mnist.py`) learns patterns on MNIST
 </p>
 
 # What This Is
@@ -39,7 +39,7 @@ box_conv = BoxConv2d(16, 8, 240, 320)
 help(BoxConv2d)
 ```
 
-Also, there is a usage example in `test-mnist.py`.
+Also, there are usage examples in `examples/`.
 
 Tested on Ubuntu 18.04.2, Python 3.6, PyTorch 1.0.0, GCC 7.3.0, CUDA 9.2. Other versions (e.g. Python 2.7 or GCC 5 or CUDA 8 or CUDA 10) should work too, but I haven't checked. If something doesn't build, please open an issue.
 

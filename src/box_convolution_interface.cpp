@@ -4,8 +4,6 @@
 #include <ATen/AccumulateType.h>
 #include <TH/THGeneral.h>
 
-
-
 #include <box_convolution.h>
 
 at::Tensor integral_image(at::Tensor input);
@@ -21,19 +19,19 @@ at::Tensor box_convolution_forward(
     AT_CHECK(input_integrated.device() == x_min.device(),
         "BoxConv2d: input and parameters are on different devices")
 
-    CHECK_CONTIGUOUS(input_integrated);
-    AT_CHECK(input_integrated.dim() == 4, "box conv input must have 4 dimensions");
+    input_integrated = input_integrated.contiguous(); // TODO support noncontiguous too
+    AT_CHECK(input_integrated.dim() == 4, "BoxConv2d: input must have 4 dimensions");
     AT_CHECK(
         x_min.dim() == 2 and x_max.dim() == 2 and y_min.dim() == 2 and y_max.dim() == 2, 
-        "all box conv parameters must have 2 dimensions");
+        "BoxConv2d: all parameters must have 2 dimensions");
     AT_CHECK(
         x_min.size(0) == x_max.size(0) and x_min.size(0) == y_min.size(0) and 
         x_min.size(0) == y_max.size(0) and x_min.size(0) == input_integrated.size(1), 
-        "all box conv parameters must have as many rows as there are input channels");
+        "BoxConv2d: all parameters must have as many rows as there are input channels");
     AT_CHECK(
         x_min.size(1) == x_max.size(1) and x_min.size(1) == y_min.size(1) and 
         x_min.size(1) == y_max.size(1),
-        "all box conv parameters must have equal number of columns");
+        "BoxConv2d: all parameters must have equal number of columns");
 
     // Split x_min, x_max, y_min, y_max into integer and fractional parts
     // TODO how to force is_variable(false)? How to set is_variable on an existing tensor?
@@ -81,7 +79,6 @@ at::Tensor box_convolution_forward(
     // Output will be 1 pixel smaller and have `num_filters` channels per each input channel
     auto output = at::empty(
         {batchSize, nInputPlanes, numFilters, h, w}, input_integrated.options());
-    CHECK_CONTIGUOUS(output);
 
     // Actually fill `output`
     if (input_integrated.is_cuda()) {
@@ -153,7 +150,7 @@ std::vector<at::Tensor> box_convolution_backward(
     const bool x_min_needs_grad, const bool x_max_needs_grad,
     const bool y_min_needs_grad, const bool y_max_needs_grad) {
 
-    CHECK_CONTIGUOUS(grad_output);
+    grad_output = grad_output.contiguous(); // TODO support noncontiguous too
     AT_CHECK(grad_output.dim() == 4, "grad_output for box_convolution must have 4 dimensions")
     AT_CHECK(
         grad_output.size(0) == input_integrated.size(0) and
@@ -312,6 +309,8 @@ std::vector<at::Tensor> box_convolution_backward(
                 area = cpu::computeArea(x_min, x_max, y_min, y_max, exact);
             }
         }
+
+        input_integrated = input_integrated.contiguous(); // TODO support noncontiguous too
 
         for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
             if (paramNeedsGrad[paramIdx]) {
