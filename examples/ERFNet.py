@@ -34,7 +34,7 @@ def ERFNet(n_classes=19):
         NonBottleneck1D(16),
         NonBottleneck1D(16),
 
-        nn.ConvTranspose2d(16, n_classes+1, 3, 2, 1, 1))
+        nn.ConvTranspose2d(16, n_classes+1, (3,3), 2, 1, 1))
 
 def BoxERFNet(n_classes=19, max_input_h=512, max_input_w=1024):
     h, w = max_input_h, max_input_w # shorten names for convenience
@@ -67,23 +67,23 @@ def BoxERFNet(n_classes=19, max_input_h=512, max_input_w=1024):
 
         NonBottleneck1D(16),
 
-        nn.ConvTranspose2d(16, n_classes+1, 3, 2, 1, 1))
+        nn.ConvTranspose2d(16, n_classes+1, (3,3), 2, 1, 1))
 
 def Upsampler(in_channels, out_channels):
     return nn.Sequential(
-        nn.ConvTranspose2d(in_channels, out_channels, 3, 2, 1, 1, bias=False),
+        nn.ConvTranspose2d(in_channels, out_channels, (3,3), 2, 1, 1, bias=False),
         nn.BatchNorm2d(out_channels),
         nn.ReLU(inplace=True))
 
 class Downsampler(nn.Module):
     def __init__(self, in_channels, out_channels, dropout_prob=0.0):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels-in_channels, 3, 2, 1, bias=False)
+        self.conv = nn.Conv2d(in_channels, out_channels-in_channels, (3,3), 2, 1, bias=False)
         self.bn = nn.BatchNorm2d(out_channels)
         self.dropout = nn.Dropout2d(dropout_prob)
 
     def forward(self, x):
-        x = torch.cat([F.max_pool2d(x, 2, 2), self.conv(x)], 1)
+        x = torch.cat([F.max_pool2d(x, (2,2)), self.conv(x)], 1)
         x = self.bn(x)
         x = self.dropout(x)
         x = F.relu(x, inplace=True)
@@ -119,7 +119,7 @@ class BottleneckBoxConv(nn.Module):
         bt_channels = in_channels // num_boxes # bottleneck channels
 
         self.main_branch = nn.Sequential(
-            nn.Conv2d(in_channels, bt_channels, 1, bias=False),
+            nn.Conv2d(in_channels, bt_channels, (1,1), bias=False),
             nn.BatchNorm2d(bt_channels),
             
             # BEHOLD:
