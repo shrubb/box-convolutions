@@ -66,6 +66,7 @@ from setuptools import setup
 
 setup(
     name='box_convolution',
+    packages=['box_convolution'],
     ext_modules=[cpp_cuda],
     cmdclass={'build_ext': torch.utils.cpp_extension.BuildExtension},
     install_requires=['future', 'torch>=1.0.0a0']
