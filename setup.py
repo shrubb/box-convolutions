@@ -30,7 +30,6 @@ def parallelCCompile(
 import distutils.ccompiler
 distutils.ccompiler.CCompiler.compile = parallelCCompile
 
-import os
 import torch
 
 build_cuda = torch.cuda.is_available() # TODO allow cross-compiling too
@@ -55,11 +54,18 @@ source_files_cuda_stubs = [
 source_files = source_files_cpp + (source_files_cuda if build_cuda else source_files_cuda_stubs)
 
 from torch.utils.cpp_extension import CppExtension, CUDAExtension
+import os
+
+extra_compile_args = {'cxx': [], 'nvcc': []}
+if os.getenv('CC'):
+    # temporary hack to allow choosing a different host compiler for NVCC too
+    extra_compile_args['nvcc'] += ['-ccbin', os.getenv('CC')]
 
 cpp_cuda = (CUDAExtension if build_cuda else CppExtension)(
     name='box_convolution_cpp_cuda',
     sources=[os.path.join(source_root, file) for file in source_files],
-    include_dirs=[source_root]
+    include_dirs=[source_root],
+    extra_compile_args=extra_compile_args
 )
 
 from setuptools import setup

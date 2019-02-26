@@ -18,15 +18,27 @@ Burkov, E., & Lempitsky, V. (2018) **Deep Neural Networks with Box Convolutions*
 ## Installing
 
 ```bash
-git clone https://github.com/shrubb/box-convolutions.git && cd box-convolutions
-python3 -m pip install .
+python3 -m pip install git+https://github.com/shrubb/box-convolutions.git
 python3 -m box_convolution.test # if throws errors, please open a GitHub issue
 ```
 
 To uninstall:
 
 ```bash
-pip3 uninstall box_convolution
+python3 -m pip uninstall box_convolution
+```
+
+Tested on Ubuntu 18.04.2, Python 3.6, PyTorch 1.0.0, GCC 7.3.0, CUDA 9.2. Other versions (e.g. Python 2.7 or GCC 5 or CUDA 8 or CUDA 10) should work too, but I haven't checked. If something doesn't build, please open a Github issue.
+
+Known issues (see [this chat](https://github.com/shrubb/box-convolutions/issues/2)):
+
+* CUDA 9/9.1 + GCC 6 isn't supported due to a bug in NVCC
+* Some GCC 5 builds might not work due to a bug in GCC
+
+You can specify a different compiler with `CC` environment variable:
+
+```bash
+CC=g++-7 python3 -m pip install git+https://github.com/shrubb/box-convolutions.git
 ```
 
 ## Using
@@ -41,9 +53,6 @@ help(BoxConv2d)
 
 Also, there are usage examples in `examples/`.
 
-Tested on Ubuntu 18.04.2, Python 3.6, PyTorch 1.0.0, GCC 7.3.0, CUDA 9.2. Other versions (e.g. Python 2.7 or GCC 5 or CUDA 8 or CUDA 10) should work too, but I haven't checked. If something doesn't build, please open an issue.
-
-CUDA 9/9.1 + GCC 6 isn't supported, see [this issue](https://github.com/shrubb/box-convolutions/issues/2).
 
 # Quick Tour of Box convolutions
 

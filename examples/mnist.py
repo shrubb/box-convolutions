@@ -113,17 +113,9 @@ def main():
     device = torch.device('cuda' if use_cuda else 'cpu')
 
     mnist_train = datasets.MNIST(
-        './', train=True, download=True,
-        transform=transforms.Compose([
-            transforms.ToTensor(),
-            # transforms.Normalize((0.1307,), (0.3081,))
-        ]))
+        './', train=True, download=True, transform=transforms.ToTensor())
     mnist_test = datasets.MNIST(
-        './', train=False,
-        transform=transforms.Compose([
-            transforms.ToTensor(),
-            # transforms.Normalize((0.1307,), (0.3081,))
-        ]))
+        './', train=False, transform=transforms.ToTensor())
 
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader = torch.utils.data.DataLoader(
