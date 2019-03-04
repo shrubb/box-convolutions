@@ -3,12 +3,12 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <THC/THC.h>
 
+#include "box_convolution.h" // for `enum class Parameter`
+
 #define BLOCK_SIZE 256
 
 using std::min;
 using std::max;
-
-#include "box_convolution.h" // for `enum class Parameter`
 
 namespace gpu {
 

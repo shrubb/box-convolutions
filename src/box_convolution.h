@@ -1,3 +1,5 @@
+#include <ciso646> // && -> and, || -> or etc.
+
 enum class Parameter {xMin, xMax, yMin, yMax};
 
 namespace cpu {

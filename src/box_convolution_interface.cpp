@@ -4,7 +4,7 @@
 #include <ATen/AccumulateType.h>
 #include <TH/THGeneral.h>
 
-#include <box_convolution.h>
+#include "box_convolution.h"
 
 at::Tensor integral_image(at::Tensor input);
 

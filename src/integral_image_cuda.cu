@@ -7,6 +7,8 @@
 #include <ATen/cuda/CUDAContext.h>
 #include <THC/THC.h>
 
+#include "integral_image.h"
+
 #include <type_traits>
 
 #define BLOCK_SIZE 256
