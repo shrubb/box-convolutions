@@ -10,9 +10,8 @@
 """
 import torch
 
-# choice: ENet / BoxENet / ERFNet / BoxERFNet
-architecture = 'BoxENet'
-device = 'cuda'
+architecture = 'ENet' # choice: ENet / BoxENet / ERFNet / BoxERFNet
+device = 'cuda' # or 'cpu'
 dtype = torch.float32
 
 if device == 'cuda':
@@ -31,8 +30,8 @@ print('Architecture:', architecture)
 print('Device:', input_image.device)
 print('Data type:', input_image.dtype)
 
-from ERFNet import ERFNet, BoxERFNet
-from ENet import ENet, BoxENet
+from models.ERFNet import ERFNet, BoxERFNet
+from models.ENet import ENet, BoxENet
 
 model = globals()[architecture](n_classes).to(input_image)
 
@@ -74,3 +73,4 @@ with torch.no_grad():
 
 time_per_frame = (end - start) / n_runs
 print('%.1f ms per frame / %.2f FPS' % (time_per_frame * 1000, 1 / time_per_frame))
+

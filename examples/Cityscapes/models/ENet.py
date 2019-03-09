@@ -2,11 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class ENet(nn.Module):
+class ENet(nn.ModuleList):
     def __init__(self, n_classes=19):
-        super().__init__()
-
-        self.net = nn.ModuleList([
+        super().__init__([
             Downsampler(3, 16),
             Bottleneck(16, 64, 0.01, downsample=True),
 
@@ -49,7 +47,7 @@ class ENet(nn.Module):
     def forward(self, x):
         max_indices_stack = []
 
-        for module in self.net:
+        for module in self:
             if isinstance(module, Upsampler):
                 x = module(x, max_indices_stack.pop())
             else:
@@ -63,10 +61,9 @@ class ENet(nn.Module):
 
 class BoxENet(ENet):
     def __init__(self, n_classes=19, max_input_h=512, max_input_w=1024):
-        nn.Module.__init__(self)
         h, w = max_input_h, max_input_w # shorten names for convenience
 
-        self.net = nn.ModuleList([
+        nn.ModuleList.__init__(self, [
             Downsampler(3, 16),
             Bottleneck(16, 64, 0.01, downsample=True),
 
@@ -103,6 +100,50 @@ class BoxENet(ENet):
             Upsampler(64, 16),
 
             BottleneckBoxConv(16, 2, h // 2, w // 2, 0.1),
+
+            nn.ConvTranspose2d(16, n_classes+1, (2,2), (2,2))])
+
+class BoxOnlyENet(ENet):
+    def __init__(self, n_classes=19, max_input_h=512, max_input_w=1024):
+        h, w = max_input_h, max_input_w # shorten names for convenience
+
+        nn.ModuleList.__init__(self, [
+            Downsampler(3, 16),
+            Bottleneck(16, 64, 0.01, downsample=True),
+
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+
+            Bottleneck(64, 128, 0.1, downsample=True),
+
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+
+            Upsampler(128, 64),
+
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+
+            Upsampler(64, 16),
+
+            BottleneckBoxConv(16, 4, h // 2, w // 2, 0.1),
 
             nn.ConvTranspose2d(16, n_classes+1, (2,2), (2,2))])
 
@@ -218,10 +259,13 @@ class BottleneckBoxConv(nn.Module):
             nn.ReLU(True),
             
             # BEHOLD:
-            BoxConv2d(bt_channels, num_boxes, max_input_h, max_input_w),
+            BoxConv2d(
+                bt_channels, num_boxes, max_input_h, max_input_w,
+                reparametrization_factor=1.5625),
 
             nn.BatchNorm2d(in_channels),
             nn.Dropout2d(dropout_prob))
 
     def forward(self, x):
         return F.relu(x + self.main_branch(x), inplace=True)
+

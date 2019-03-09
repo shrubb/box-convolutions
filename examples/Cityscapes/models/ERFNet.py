@@ -2,72 +2,74 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def ERFNet(n_classes=19):
-    return nn.Sequential(
-        Downsampler( 3, 16, 0.0 ),
-        Downsampler(16, 64, 0.03),
+class ERFNet(nn.Sequential):
+    def __init__(self, n_classes=19):
+        super().__init__(
+            Downsampler( 3, 16, 0.0 ),
+            Downsampler(16, 64, 0.03),
 
-        NonBottleneck1D(64, 0.03),
-        NonBottleneck1D(64, 0.03),
-        NonBottleneck1D(64, 0.03),
-        NonBottleneck1D(64, 0.03),
-        NonBottleneck1D(64, 0.03),
+            NonBottleneck1D(64, 0.03),
+            NonBottleneck1D(64, 0.03),
+            NonBottleneck1D(64, 0.03),
+            NonBottleneck1D(64, 0.03),
+            NonBottleneck1D(64, 0.03),
 
-        Downsampler(64, 128, 0.3),
+            Downsampler(64, 128, 0.3),
 
-        NonBottleneck1D(128, 0.3,  2),
-        NonBottleneck1D(128, 0.3,  4),
-        NonBottleneck1D(128, 0.3,  8),
-        NonBottleneck1D(128, 0.3, 16),
-        NonBottleneck1D(128, 0.3,  2),
-        NonBottleneck1D(128, 0.3,  4),
-        NonBottleneck1D(128, 0.3,  8),
-        NonBottleneck1D(128, 0.3, 16),
+            NonBottleneck1D(128, 0.3,  2),
+            NonBottleneck1D(128, 0.3,  4),
+            NonBottleneck1D(128, 0.3,  8),
+            NonBottleneck1D(128, 0.3, 16),
+            NonBottleneck1D(128, 0.3,  2),
+            NonBottleneck1D(128, 0.3,  4),
+            NonBottleneck1D(128, 0.3,  8),
+            NonBottleneck1D(128, 0.3, 16),
 
-        Upsampler(128, 64),
+            Upsampler(128, 64),
 
-        NonBottleneck1D(64),
-        NonBottleneck1D(64),
+            NonBottleneck1D(64),
+            NonBottleneck1D(64),
 
-        Upsampler(64, 16),
+            Upsampler(64, 16),
 
-        NonBottleneck1D(16),
-        NonBottleneck1D(16),
+            NonBottleneck1D(16),
+            NonBottleneck1D(16),
 
-        nn.ConvTranspose2d(16, n_classes+1, (3,3), 2, 1, 1))
+            nn.ConvTranspose2d(16, n_classes+1, (3,3), 2, 1, 1))
 
-def BoxERFNet(n_classes=19, max_input_h=512, max_input_w=1024):
-    h, w = max_input_h, max_input_w # shorten names for convenience
+class BoxERFNet(nn.Sequential):
+    def __init__(self, n_classes=19, max_input_h=512, max_input_w=1024):
+        h, w = max_input_h, max_input_w # shorten names for convenience
 
-    return nn.Sequential(
-        Downsampler( 3, 16, 0.0 ),
-        Downsampler(16, 64, 0.03),
+        super().__init__(
+            Downsampler( 3, 16, 0.0 ),
+            Downsampler(16, 64, 0.03),
 
-        NonBottleneck1D(64, 0.03),
-        BottleneckBoxConv(64, 4, h // 4, w // 4, 0.03),
+            NonBottleneck1D(64, 0.03),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.03),
 
-        Downsampler(64, 128, 0.3),
+            Downsampler(64, 128, 0.3),
 
-        NonBottleneck1D(128, 0.3, 2),
-        BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
-        NonBottleneck1D(128, 0.3, 4),
+            NonBottleneck1D(128, 0.3, 2),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
+            NonBottleneck1D(128, 0.3, 4),
 
-        BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
 
-        NonBottleneck1D(128, 0.3, 2),
-        BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
-        NonBottleneck1D(128, 0.3, 4),
-        BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
+            NonBottleneck1D(128, 0.3, 2),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
+            NonBottleneck1D(128, 0.3, 4),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.3),
 
-        Upsampler(128, 64),
+            Upsampler(128, 64),
 
-        NonBottleneck1D(64),
+            NonBottleneck1D(64),
 
-        Upsampler(64, 16),
+            Upsampler(64, 16),
 
-        NonBottleneck1D(16),
+            NonBottleneck1D(16),
 
-        nn.ConvTranspose2d(16, n_classes+1, (3,3), 2, 1, 1))
+            nn.ConvTranspose2d(16, n_classes+1, (3,3), 2, 1, 1))
 
 def Upsampler(in_channels, out_channels):
     return nn.Sequential(
@@ -115,6 +117,7 @@ from box_convolution import BoxConv2d
 class BottleneckBoxConv(nn.Module):
     def __init__(self, in_channels, num_boxes, max_input_h, max_input_w, dropout_prob=0.0):
         super().__init__()
+
         assert in_channels % num_boxes == 0
         bt_channels = in_channels // num_boxes # bottleneck channels
 
@@ -123,7 +126,9 @@ class BottleneckBoxConv(nn.Module):
             nn.BatchNorm2d(bt_channels),
             
             # BEHOLD:
-            BoxConv2d(bt_channels, num_boxes, max_input_h, max_input_w),
+            BoxConv2d(
+                bt_channels, num_boxes, max_input_h, max_input_w,
+                reparametrization_factor=1.5625),
 
             nn.BatchNorm2d(in_channels),
             nn.Dropout2d(dropout_prob))
