@@ -210,8 +210,9 @@ void boxConvUpdateOutput(
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & area, at::Tensor & input_integrated, at::Tensor & output) {
 
-    const int h = output.size(-2);
-    const int w = output.size(-1);
+    // was `const int`, but had to remove `const` to work around a bug in GCC 5
+    int h = output.size(-2);
+    int w = output.size(-1);
     const int totalOutputChannels = output.numel() / (h * w);
 
     const dim3 blockSize(32, 32, 1);

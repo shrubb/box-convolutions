@@ -28,12 +28,11 @@ To uninstall:
 python3 -m pip uninstall box_convolution
 ```
 
-Tested on Ubuntu 18.04.2, Python 3.6, PyTorch 1.0.0, GCC 7.3.0, CUDA 9.2. Other versions (e.g. Python 2.7 or GCC 5 or CUDA 8 or CUDA 10) should work too, but I haven't checked. If something doesn't build, please open a Github issue.
+Tested on Ubuntu 18.04.2, Python 3.6, PyTorch 1.0.0, GCC {4.9, 5.5, 6.5, 7.3}, CUDA 9.2. Other versions (e.g. macOS or Python 2.7 or CUDA 8 or CUDA 10) should work too, but I haven't checked. If something doesn't build, please open a Github issue.
 
 Known issues (see [this chat](https://github.com/shrubb/box-convolutions/issues/2)):
 
-* CUDA 9/9.1 + GCC 6 isn't supported due to a bug in NVCC
-* Some GCC 5 builds might not work due to a bug in GCC
+* CUDA 9/9.1 + GCC 6 isn't supported due to a bug in NVCC.
 
 You can specify a different compiler with `CC` environment variable:
 

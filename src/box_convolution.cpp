@@ -103,11 +103,11 @@ void boxConvUpdateOutput(
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & area, at::Tensor & input_integrated, at::Tensor & output) {
 
-    const int h = output.size(-2);
-    const int w = output.size(-1);
+    // was `const int`, but had to remove `const` to work around a bug in GCC 5
+    int h = output.size(-2);
+    int w = output.size(-1);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "cpu::boxConvUpdateOutput", ([&] {
-
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
         auto yMinIntAcsr = yMinInt.accessor<int, 2>();
@@ -281,7 +281,6 @@ template void boxConvUpdateOutput<false, false>(
     at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &,
     at::Tensor &, at::Tensor &, at::Tensor &);
 
-
 // `grad_output_integrated` size: {batchSize, nInputPlanes, numFilters, h+1, w+1}
 // `tmpArray` size: {batchSize, nInputPlanes, numFilters, h, w}
 template <bool normalize, bool exact>
@@ -290,8 +289,9 @@ void boxConvUpdateGradInput(
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & area, at::Tensor & grad_output_integrated, at::Tensor & tmpArray) {
 
-    const int h = tmpArray.size(-2);
-    const int w = tmpArray.size(-1);
+    // was `const int`, but had to remove `const` to work around a bug in GCC 5
+    int h = tmpArray.size(-2);
+    int w = tmpArray.size(-1);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "cpu::boxConvUpdateGradInput", ([&] {
 
@@ -484,8 +484,9 @@ void boxConvAccGradParameters(
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac,
     at::Tensor & input_integrated, at::Tensor & tmpArray, Parameter parameter) {
 
-    const int h = tmpArray.size(-2);
-    const int w = tmpArray.size(-1);
+    // was `const int`, but had to remove `const` to work around a bug in GCC 5
+    int h = tmpArray.size(-2);
+    int w = tmpArray.size(-1);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "cpu::boxConvAccGradParameters", ([&] {
         

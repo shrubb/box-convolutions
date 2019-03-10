@@ -171,7 +171,7 @@ void boxConvUpdateGradInput(
 
     // TODO use square blocks as in `boxConvUpdateOutput`?
     const int threadsNeeded = tmpArray.numel();
-    const int numBlocks = (threadsNeeded + NUM_THREADS - 1) / NUM_THREADS;
+    int numBlocks = (threadsNeeded + NUM_THREADS - 1) / NUM_THREADS;
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "gpu::boxConvUpdateGradInput", ([&] {
         auto gradOutputIntFlattened = grad_output_integrated.view(
@@ -426,7 +426,7 @@ void boxConvAccGradParameters(
 
     // TODO switch to square blocks?
     const int threadsNeeded = tmpArray.numel();
-    const int numBlocks = (threadsNeeded + NUM_THREADS - 1) / NUM_THREADS;
+    int numBlocks = (threadsNeeded + NUM_THREADS - 1) / NUM_THREADS;
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "gpu::boxConvAccGradParameters", ([&] {
         auto inputIntFlattened = input_integrated.view(
