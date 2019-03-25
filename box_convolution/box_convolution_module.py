@@ -83,14 +83,14 @@ class BoxConv2d(torch.nn.Module):
                     center_w = random.uniform(
                         -max_w*2/4.8+1+min_w/2, max_w*2/4.8-1-min_w/2)
                     height = 2 * random.uniform(
-                        min_h/2, min((max_h-1)-center_h, center_h-(-max_h+1)))
+                        min_h/2, min((max_h*2/4.8-1)-center_h, center_h-(-max_h*2/4.8+1)))
                     width  = 2 * random.uniform(
-                        min_w/2, min((max_w-1)-center_w, center_w-(-max_w+1)))
+                        min_w/2, min((max_w*2/4.8-1)-center_w, center_w-(-max_w*2/4.8+1)))
 
-                    self.x_min[in_plane_idx, filter_idx] = center_h - height/2
-                    self.x_max[in_plane_idx, filter_idx] = center_h + height/2
-                    self.y_min[in_plane_idx, filter_idx] = center_w - width /2
-                    self.y_max[in_plane_idx, filter_idx] = center_w + width /2
+                    self.x_min[in_plane_idx, filter_idx] = (center_h - height/2) * 1.5
+                    self.x_max[in_plane_idx, filter_idx] = (center_h + height/2) * 1.5
+                    self.y_min[in_plane_idx, filter_idx] = (center_w - width /2) * 1.5
+                    self.y_max[in_plane_idx, filter_idx] = (center_w + width /2) * 1.5
 
         reparametrize(
             self.x_min, self.x_max, self.y_min, self.y_max,

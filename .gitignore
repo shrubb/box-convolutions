@@ -3,4 +3,6 @@
 *.so
 build/
 *.egg-info
-MNIST/
+examples/MNIST/
+*runs/
+*log.txt

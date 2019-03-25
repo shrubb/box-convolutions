@@ -62,88 +62,90 @@ class ENet(nn.ModuleList):
 class BoxENet(ENet):
     def __init__(self, n_classes=19, max_input_h=512, max_input_w=1024):
         h, w = max_input_h, max_input_w # shorten names for convenience
+        r = 0.860 # reparametrization factor
 
         nn.ModuleList.__init__(self, [
             Downsampler(3, 16),
             Bottleneck(16, 64, 0.01, downsample=True),
 
             Bottleneck(64, 64, 0.01),
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
             Bottleneck(64, 64, 0.01),
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
 
             Bottleneck(64, 128, 0.1, downsample=True),
 
             Bottleneck(128, 128, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
             Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
             Bottleneck(128, 128, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
             Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
 
             Bottleneck(128, 128, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
             Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
             Bottleneck(128, 128, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
             Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.25, reparam_factor=r),
 
             Upsampler(128, 64),
 
             Bottleneck(64, 64, 0.1),
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1, reparam_factor=r),
 
             Upsampler(64, 16),
 
-            BottleneckBoxConv(16, 2, h // 2, w // 2, 0.1),
+            BottleneckBoxConv(16, 2, h // 2, w // 2, 0.1, reparam_factor=r),
 
             nn.ConvTranspose2d(16, n_classes+1, (2,2), (2,2))])
 
 class BoxOnlyENet(ENet):
     def __init__(self, n_classes=19, max_input_h=512, max_input_w=1024):
         h, w = max_input_h, max_input_w # shorten names for convenience
+        r = 0.510 # reparametrization factor
 
         nn.ModuleList.__init__(self, [
             Downsampler(3, 16),
             Bottleneck(16, 64, 0.01, downsample=True),
 
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
 
-            Bottleneck(64, 128, 0.1, downsample=True),
+            Bottleneck(64, 128, 0.01, downsample=True),
 
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
 
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
-            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.1),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
+            BottleneckBoxConv(128, 4, h // 8, w // 8, 0.4, reparam_factor=r),
 
             Upsampler(128, 64),
 
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
-            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.1),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
+            BottleneckBoxConv(64, 4, h // 4, w // 4, 0.15, reparam_factor=r),
 
             Upsampler(64, 16),
 
-            BottleneckBoxConv(16, 4, h // 2, w // 2, 0.1),
+            BottleneckBoxConv(16, 4, h // 2, w // 2, 0.05, reparam_factor=r),
 
             nn.ConvTranspose2d(16, n_classes+1, (2,2), (2,2))])
 
@@ -151,7 +153,7 @@ class BoxOnlyENet(ENet):
 class Upsampler(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        bt_channels = in_channels // 4
+        bt_channels = out_channels // 4
 
         self.main_branch = nn.Sequential(
             nn.Conv2d(in_channels, bt_channels, (1,1), bias=False),
@@ -173,7 +175,7 @@ class Upsampler(nn.Module):
         x_skip_connection = self.skip_connection(x)
         x_skip_connection = F.max_unpool2d(x_skip_connection, max_indices, (2,2))
 
-        return F.relu(x_skip_connection + self.main_branch(x), inplace=True)
+        return (x_skip_connection + self.main_branch(x)).relu_()
 
 class Downsampler(nn.Module):
     def __init__(self, in_channels, out_channels):
@@ -189,12 +191,11 @@ class Downsampler(nn.Module):
         return x
 
 class Bottleneck(nn.Module):
-    def __init__(
-        self, in_channels, out_channels, dropout_prob=0.0, downsample=False,
+    def __init__(self, in_channels, out_channels, dropout_prob=0.0, downsample=False,
         asymmetric_ksize=None, dilation=1, use_prelu=True):
 
         super().__init__()
-        bt_channels = in_channels // 4
+        bt_channels = out_channels // 4
         self.downsample = downsample
         self.channels_to_pad = out_channels-in_channels
 
@@ -208,7 +209,7 @@ class Bottleneck(nn.Module):
        
         if asymmetric_ksize is None:
             main_branch += [
-                nn.Conv2d(bt_channels, bt_channels, (3,3), 1, dilation, dilation)
+                nn.Conv2d(bt_channels, bt_channels, (3,3), 1, dilation, dilation, bias=False)
             ]
         else:
             assert type(asymmetric_ksize) is int
@@ -248,7 +249,9 @@ class Bottleneck(nn.Module):
 from box_convolution import BoxConv2d
 
 class BottleneckBoxConv(nn.Module):
-    def __init__(self, in_channels, num_boxes, max_input_h, max_input_w, dropout_prob=0.0):
+    def __init__(self, in_channels, num_boxes, max_input_h, max_input_w,
+        dropout_prob=0.0, reparam_factor=1.5625):
+
         super().__init__()
         assert in_channels % num_boxes == 0
         bt_channels = in_channels // num_boxes # bottleneck channels
@@ -261,11 +264,11 @@ class BottleneckBoxConv(nn.Module):
             # BEHOLD:
             BoxConv2d(
                 bt_channels, num_boxes, max_input_h, max_input_w,
-                reparametrization_factor=1.5625),
+                reparametrization_factor=reparam_factor),
 
             nn.BatchNorm2d(in_channels),
             nn.Dropout2d(dropout_prob))
 
     def forward(self, x):
-        return F.relu(x + self.main_branch(x), inplace=True)
+        return (x + self.main_branch(x)).relu_()
 
