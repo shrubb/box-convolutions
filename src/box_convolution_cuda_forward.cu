@@ -33,10 +33,10 @@ __global__ void boxConvUpdateOutputKernel(
     const scalar_t * __restrict__ area) {
 
     // `output` size: `batch_size x in_planes x num_filters x h x w`
-    const int32_t y = blockDim.x * blockIdx.x + threadIdx.x;
-    const int32_t x = blockDim.y * blockIdx.y + threadIdx.y;
-    const int32_t inPlaneIdx = blockIdx.z / output.size(2);
-    const int32_t paramIdx = blockIdx.z % (output.size(1) * output.size(2));
+    const int32_t y = blockDim.y * blockIdx.y + threadIdx.y;
+    const int32_t x = blockDim.z * blockIdx.z + threadIdx.z;
+    const int32_t inPlaneIdx = blockIdx.x / output.size(2);
+    const int32_t paramIdx = blockIdx.x % (output.size(1) * output.size(2));
     const int32_t h = output.size(3);
     const int32_t w = output.size(4);
 
@@ -64,7 +64,7 @@ __global__ void boxConvUpdateOutputKernel(
         outValue += inputIntPlane[t][l];
 
         // TODO error: expression must be a modifiable lvalue
-        output.data()[(blockIdx.z * h + x) * w + y] =
+        output.data()[(blockIdx.x * h + x) * w + y] =
             outValue * (normalize ? area[paramIdx] : static_cast<scalar_t>(1));
     }
 }
@@ -79,10 +79,10 @@ __global__ void boxConvUpdateOutputKernel(
     const scalar_t * __restrict__ yMinFrac, const scalar_t * __restrict__ yMaxFrac,
     const scalar_t * __restrict__ area) {
 
-    const int32_t y = blockDim.x * blockIdx.x + threadIdx.x;
-    const int32_t x = blockDim.y * blockIdx.y + threadIdx.y;
-    const int32_t inPlaneIdx = blockIdx.z / output.size(2);
-    const int32_t paramIdx = blockIdx.z % (output.size(1) * output.size(2));
+    const int32_t y = blockDim.y * blockIdx.y + threadIdx.y;
+    const int32_t x = blockDim.z * blockIdx.z + threadIdx.z;
+    const int32_t inPlaneIdx = blockIdx.x / output.size(2);
+    const int32_t paramIdx = blockIdx.x % (output.size(1) * output.size(2));
     const int32_t h = output.size(3);
     const int32_t w = output.size(4);
 
@@ -198,7 +198,7 @@ __global__ void boxConvUpdateOutputKernel(
         }
 
         // TODO error: expression must be a modifiable lvalue
-        output.data()[(blockIdx.z * h + x) * w + y] =
+        output.data()[(blockIdx.x * h + x) * w + y] =
             outValue * (normalize ? area[paramIdx] : static_cast<scalar_t>(1));
     }
 }
@@ -215,11 +215,11 @@ void boxConvUpdateOutput(
     int w = output.size(-1);
     const int totalOutputChannels = output.numel() / (h * w);
 
-    const dim3 blockSize(32, 32, 1);
+    const dim3 blockSize(1, 32, 32);
     const dim3 gridSize(
-        (w + blockSize.x - 1) / blockSize.x,
-        (h + blockSize.y - 1) / blockSize.y,
-        (totalOutputChannels  + blockSize.z - 1) / blockSize.z);
+        (totalOutputChannels  + blockSize.x - 1) / blockSize.x,
+        (w + blockSize.y - 1) / blockSize.y,
+        (h + blockSize.z - 1) / blockSize.z);
 
     AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "gpu::boxConvUpdateOutput", ([&] {
         
