@@ -28,8 +28,8 @@ __global__ void accumulateColsInplaceTransposedKernel(
 template<typename scalar_t>
 void transpose(at::Tensor & input, at::Tensor & output) {
 
-    AT_CHECK(input.dim() == 2);
-    AT_CHECK(input.numel() == output.numel());
+    TORCH_CHECK(input.dim() == 2);
+    TORCH_CHECK(input.numel() == output.numel());
 
     if (std::is_same<scalar_t, float>()) {
         cublasHandle_t cublasHandle = at::cuda::getCurrentCUDABlasHandle();
@@ -40,9 +40,9 @@ void transpose(at::Tensor & input, at::Tensor & output) {
         THCublasCheck(cublasSgeam(
             cublasHandle,
             CUBLAS_OP_T, CUBLAS_OP_N, input.size(0), input.size(1),
-            &ONE, input.data<float>(), input.size(1),
-            &ZERO, output.data<float>(), input.size(0),
-            output.data<float>(), input.size(0)));
+            &ONE, input.data_ptr<float>(), input.size(1),
+            &ZERO, output.data_ptr<float>(), input.size(0),
+            output.data_ptr<float>(), input.size(0)));
 
     } else if (std::is_same<scalar_t, double>()) {
         cublasHandle_t cublasHandle = at::cuda::getCurrentCUDABlasHandle();
@@ -53,9 +53,9 @@ void transpose(at::Tensor & input, at::Tensor & output) {
         THCublasCheck(cublasDgeam(
             cublasHandle,
             CUBLAS_OP_T, CUBLAS_OP_N, input.size(0), input.size(1),
-            &ONE, input.data<double>(), input.size(1),
-            &ZERO, output.data<double>(), input.size(0),
-            output.data<double>(), input.size(0)));
+            &ONE, input.data_ptr<double>(), input.size(1),
+            &ZERO, output.data_ptr<double>(), input.size(0),
+            output.data_ptr<double>(), input.size(0)));
         
     } else {
         // TODO improve
@@ -76,7 +76,7 @@ void integral_image(at::Tensor & input, at::Tensor & output) {
 
     cudaStream_t currentStream = at::cuda::getCurrentCUDAStream();
     
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(input.type(), "integral_image_forward_gpu", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(input.scalar_type(), "integral_image_forward_gpu", ([&] {
         using accscalar_t = at::acc_type<scalar_t, true>;
 
         // input : (channels) x (h) x (w), contiguous
@@ -92,7 +92,7 @@ void integral_image(at::Tensor & input, at::Tensor & output) {
         gridSize1D = (totalCols + blockSize1D - 1) / blockSize1D;
         accumulateColsKernel <scalar_t, accscalar_t>
             <<<gridSize1D, blockSize1D, 0, currentStream>>>
-            (inputView.data<scalar_t>(), outputView.data<scalar_t>(), channels, h, w);
+            (inputView.data_ptr<scalar_t>(), outputView.data_ptr<scalar_t>(), channels, h, w);
         THCudaCheck(cudaGetLastError());
 
         // transpose, `output` -> `tmpBuffer`
@@ -107,7 +107,7 @@ void integral_image(at::Tensor & input, at::Tensor & output) {
         gridSize1D = (totalRows + blockSize1D - 1) / blockSize1D;
         accumulateColsInplaceTransposedKernel <scalar_t, accscalar_t>
             <<<gridSize1D, blockSize1D, 0, currentStream>>>
-            (tmpBuffer.data<scalar_t>(), channels, h, w);
+            (tmpBuffer.data_ptr<scalar_t>(), channels, h, w);
         THCudaCheck(cudaGetLastError());
 
         // transpose, `tmpBuffer` -> `output`

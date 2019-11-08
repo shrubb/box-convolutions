@@ -57,15 +57,15 @@ void splitParameters(
     const int threadsNeeded = 2 * x_min.numel();
     const int numBlocks = (threadsNeeded + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "gpu::splitParameters", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.scalar_type(), "gpu::splitParameters", ([&] {
         splitParametersKernel
         <<<numBlocks, BLOCK_SIZE, 0, at::cuda::getCurrentCUDAStream()>>> (
-            x_min.data<scalar_t>(), x_max.data<scalar_t>(),
-            y_min.data<scalar_t>(), y_max.data<scalar_t>(),
-            xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
-            yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
-            xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-            yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(),
+            x_min.data_ptr<scalar_t>(), x_max.data_ptr<scalar_t>(),
+            y_min.data_ptr<scalar_t>(), y_max.data_ptr<scalar_t>(),
+            xMinInt.data_ptr<int32_t>(), xMaxInt.data_ptr<int32_t>(),
+            yMinInt.data_ptr<int32_t>(), yMaxInt.data_ptr<int32_t>(),
+            xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+            yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(),
             x_min.numel());
         THCudaCheck(cudaGetLastError());
     }));
@@ -115,15 +115,15 @@ void splitParametersUpdateGradInput(
     const int threadsNeeded = 2 * x_min.numel();
     const int numBlocks = (threadsNeeded + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "gpu::splitParametersUpdateGradInput", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.scalar_type(), "gpu::splitParametersUpdateGradInput", ([&] {
         splitParametersUpdateGradInputKernel 
         <<<numBlocks, BLOCK_SIZE, 0, at::cuda::getCurrentCUDAStream()>>> (
-            x_min.data<scalar_t>(), x_max.data<scalar_t>(),
-            y_min.data<scalar_t>(), y_max.data<scalar_t>(),
-            xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
-            yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
-            xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-            yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(),
+            x_min.data_ptr<scalar_t>(), x_max.data_ptr<scalar_t>(),
+            y_min.data_ptr<scalar_t>(), y_max.data_ptr<scalar_t>(),
+            xMinInt.data_ptr<int32_t>(), xMaxInt.data_ptr<int32_t>(),
+            yMinInt.data_ptr<int32_t>(), yMaxInt.data_ptr<int32_t>(),
+            xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+            yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(),
             x_min.numel());
         THCudaCheck(cudaGetLastError());
     }));
@@ -173,15 +173,15 @@ void splitParametersAccGradParameters(
     const int threadsNeeded = 2 * x_min.numel();
     const int numBlocks = (threadsNeeded + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "gpu::splitParametersAccGradParams", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.scalar_type(), "gpu::splitParametersAccGradParams", ([&] {
         splitParametersAccGradParametersKernel
         <<<numBlocks, BLOCK_SIZE, 0, at::cuda::getCurrentCUDAStream()>>> (
-            x_min.data<scalar_t>(), x_max.data<scalar_t>(),
-            y_min.data<scalar_t>(), y_max.data<scalar_t>(),
-            xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
-            yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
-            xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-            yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(),
+            x_min.data_ptr<scalar_t>(), x_max.data_ptr<scalar_t>(),
+            y_min.data_ptr<scalar_t>(), y_max.data_ptr<scalar_t>(),
+            xMinInt.data_ptr<int32_t>(), xMaxInt.data_ptr<int32_t>(),
+            yMinInt.data_ptr<int32_t>(), yMaxInt.data_ptr<int32_t>(),
+            xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+            yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(),
             x_min.numel());
         THCudaCheck(cudaGetLastError());
     }));
@@ -226,10 +226,10 @@ void clipParameters(
 
     const double inverseReparam = 1.0 / reparametrization;
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.type(), "gpu::clipParameters", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.scalar_type(), "gpu::clipParameters", ([&] {
         clipParametersKernel
         <<<numBlocks, BLOCK_SIZE, 0, at::cuda::getCurrentCUDAStream()>>> (
-            paramMin.data<scalar_t>(), paramMax.data<scalar_t>(),
+            paramMin.data_ptr<scalar_t>(), paramMax.data_ptr<scalar_t>(),
             inverseReparam, minSize, maxSize, paramMin.numel());
         THCudaCheck(cudaGetLastError());
     }));
@@ -268,28 +268,28 @@ at::Tensor computeArea(
     const int threadsNeeded = x_min.numel();
     const int numBlocks = (threadsNeeded + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "gpu::computeArea", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.scalar_type(), "gpu::computeArea", ([&] {
         if (needXDeriv) {
             if (needYDeriv) {
                 computeAreaKernel <true, true>
                 <<<numBlocks, BLOCK_SIZE, 0, at::cuda::getCurrentCUDAStream()>>> (
-                    x_min.data<scalar_t>(), x_max.data<scalar_t>(),
-                    y_min.data<scalar_t>(), y_max.data<scalar_t>(),
-                    retval.data<scalar_t>(), x_min.numel());
+                    x_min.data_ptr<scalar_t>(), x_max.data_ptr<scalar_t>(),
+                    y_min.data_ptr<scalar_t>(), y_max.data_ptr<scalar_t>(),
+                    retval.data_ptr<scalar_t>(), x_min.numel());
             } else {
                 computeAreaKernel <true, false>
                 <<<numBlocks, BLOCK_SIZE, 0, at::cuda::getCurrentCUDAStream()>>> (
-                    x_min.data<scalar_t>(), x_max.data<scalar_t>(),
-                    y_min.data<scalar_t>(), y_max.data<scalar_t>(),
-                    retval.data<scalar_t>(), x_min.numel());
+                    x_min.data_ptr<scalar_t>(), x_max.data_ptr<scalar_t>(),
+                    y_min.data_ptr<scalar_t>(), y_max.data_ptr<scalar_t>(),
+                    retval.data_ptr<scalar_t>(), x_min.numel());
             }
         } else {
             if (needYDeriv) {
                 computeAreaKernel <false, true>
                 <<<numBlocks, BLOCK_SIZE, 0, at::cuda::getCurrentCUDAStream()>>> (
-                    x_min.data<scalar_t>(), x_max.data<scalar_t>(),
-                    y_min.data<scalar_t>(), y_max.data<scalar_t>(),
-                    retval.data<scalar_t>(), x_min.numel());
+                    x_min.data_ptr<scalar_t>(), x_max.data_ptr<scalar_t>(),
+                    y_min.data_ptr<scalar_t>(), y_max.data_ptr<scalar_t>(),
+                    retval.data_ptr<scalar_t>(), x_min.numel());
             } else {
                 THError("computeArea called with needXDeriv == needYDeriv == false");
             }

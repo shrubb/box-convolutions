@@ -8,7 +8,7 @@
 
 at::Tensor integral_image(at::Tensor input);
 
-#define CHECK_CONTIGUOUS(x) AT_CHECK(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 
 at::Tensor box_convolution_forward(
     at::Tensor input_integrated,
@@ -16,19 +16,19 @@ at::Tensor box_convolution_forward(
     at::Tensor y_min, at::Tensor y_max,
     const bool normalize, const bool exact) {
 
-    AT_CHECK(input_integrated.device() == x_min.device(),
-        "BoxConv2d: input and parameters are on different devices")
+    TORCH_CHECK(input_integrated.device() == x_min.device(),
+        "BoxConv2d: input and parameters are on different devices");
 
     input_integrated = input_integrated.contiguous(); // TODO support noncontiguous too
-    AT_CHECK(input_integrated.dim() == 4, "BoxConv2d: input must have 4 dimensions");
-    AT_CHECK(
+    TORCH_CHECK(input_integrated.dim() == 4, "BoxConv2d: input must have 4 dimensions");
+    TORCH_CHECK(
         x_min.dim() == 2 and x_max.dim() == 2 and y_min.dim() == 2 and y_max.dim() == 2, 
         "BoxConv2d: all parameters must have 2 dimensions");
-    AT_CHECK(
+    TORCH_CHECK(
         x_min.size(0) == x_max.size(0) and x_min.size(0) == y_min.size(0) and 
         x_min.size(0) == y_max.size(0) and x_min.size(0) == input_integrated.size(1), 
         "BoxConv2d: all parameters must have as many rows as there are input channels");
-    AT_CHECK(
+    TORCH_CHECK(
         x_min.size(1) == x_max.size(1) and x_min.size(1) == y_min.size(1) and 
         x_min.size(1) == y_max.size(1),
         "BoxConv2d: all parameters must have equal number of columns");
@@ -151,21 +151,21 @@ std::vector<at::Tensor> box_convolution_backward(
     const bool y_min_needs_grad, const bool y_max_needs_grad) {
 
     grad_output = grad_output.contiguous(); // TODO support noncontiguous too
-    AT_CHECK(grad_output.dim() == 4, "grad_output for box_convolution must have 4 dimensions")
-    AT_CHECK(
+    TORCH_CHECK(grad_output.dim() == 4, "grad_output for box_convolution must have 4 dimensions")
+    TORCH_CHECK(
         grad_output.size(0) == input_integrated.size(0) and
         grad_output.size(1) == input_integrated.size(1) * x_min.size(1) and
         grad_output.size(2) == input_integrated.size(2) - 1 and
         grad_output.size(2) == input_integrated.size(2) - 1,
         "box_convolution: sizes of grad_output and input_integrated don't match");
-    AT_CHECK(
+    TORCH_CHECK(
         x_min.dim() == 2 and x_max.dim() == 2 and y_min.dim() == 2 and y_max.dim() == 2, 
         "all box conv parameters must have 2 dimensions");
-    AT_CHECK(
+    TORCH_CHECK(
         x_min.size(0) == x_max.size(0) and x_min.size(0) == y_min.size(0) and 
         x_min.size(0) == y_max.size(0) and x_min.size(0) == input_integrated.size(1), 
         "all box conv parameters must have as many rows as there are input channels");
-    AT_CHECK(
+    TORCH_CHECK(
         x_min.size(1) == x_max.size(1) and x_min.size(1) == y_min.size(1) and 
         x_min.size(1) == y_max.size(1),
         "all box conv parameters must have equal number of columns");
@@ -345,7 +345,7 @@ std::vector<at::Tensor> box_convolution_backward(
                 tmpArray.mul_(grad_output);
 
                 gradParam[paramIdx] = 
-                    tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum({0, 3});
+                    tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum(c10::IntArrayRef({0, 3}));
 
                 if (normalize) {
                     gradParam[paramIdx].mul_(area);
@@ -357,7 +357,7 @@ std::vector<at::Tensor> box_convolution_backward(
             output = output.reshape({batchSize, nInputPlanes, numFilters, h, w});
             
             tmpArray = grad_output.mul(output);
-            tmpArray = tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum({0, 3});
+            tmpArray = tmpArray.reshape({batchSize, nInputPlanes, numFilters, h*w}).sum(c10::IntArrayRef({0, 3}));
 
             for (int paramIdx = 0; paramIdx < 4; ++paramIdx) {
                 if (paramNeedsGrad[paramIdx]) {

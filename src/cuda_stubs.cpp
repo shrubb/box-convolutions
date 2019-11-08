@@ -2,8 +2,8 @@
 
 #include "box_convolution.h" // for `enum class Parameter`
 
-#define STUB_ERROR AT_ERROR("box_convolution was compiled withoud CUDA support because " \
-                            "torch.cuda.is_available() was False when you ran setup.py.")
+#define STUB_ERROR TORCH_CHECK(false, "box_convolution was compiled withoud CUDA support because " \
+                                      "torch.cuda.is_available() was False when you ran setup.py.")
 
 namespace gpu {
 

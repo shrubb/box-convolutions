@@ -22,7 +22,7 @@ namespace gpu {
 // }
 
 template <typename T, size_t N>
-using CudaAcsr = const at::PackedTensorAccessor<T, N, at::RestrictPtrTraits, int32_t>;
+using CudaAcsr = const at::PackedTensorAccessor32<T, N, torch::RestrictPtrTraits>;
 
 // overload for "truncated"/"rounded" mode
 template <bool normalize, typename scalar_t>
@@ -221,30 +221,30 @@ void boxConvUpdateOutput(
         (w + blockSize.y - 1) / blockSize.y,
         (h + blockSize.z - 1) / blockSize.z);
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "gpu::boxConvUpdateOutput", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.scalar_type(), "gpu::boxConvUpdateOutput", ([&] {
         
         auto inputIntFlattened = input_integrated.view({-1, h+1, w+1});
         auto inputIntAcsr =
-            inputIntFlattened.packed_accessor<scalar_t, 3, at::RestrictPtrTraits, int32_t>();
+            inputIntFlattened.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>();
             
-        auto outputAcsr = output.packed_accessor<scalar_t, 5, at::RestrictPtrTraits, int32_t>();
+        auto outputAcsr = output.packed_accessor32<scalar_t, 5, torch::RestrictPtrTraits>();
 
         if (exact) {
             boxConvUpdateOutputKernel <normalize>
                 <<<gridSize, blockSize, 0, at::cuda::getCurrentCUDAStream()>>> (
                 inputIntAcsr, outputAcsr,
-                xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
-                yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
-                xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-                yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(),
-                normalize ? area.data<scalar_t>() : nullptr);
+                xMinInt.data_ptr<int32_t>(), xMaxInt.data_ptr<int32_t>(),
+                yMinInt.data_ptr<int32_t>(), yMaxInt.data_ptr<int32_t>(),
+                xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+                yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(),
+                normalize ? area.data_ptr<scalar_t>() : nullptr);
         } else {
             boxConvUpdateOutputKernel <normalize>
                 <<<gridSize, blockSize, 0, at::cuda::getCurrentCUDAStream()>>> (
                 inputIntAcsr, outputAcsr,
-                xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
-                yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
-                normalize ? area.data<scalar_t>() : nullptr);
+                xMinInt.data_ptr<int32_t>(), xMaxInt.data_ptr<int32_t>(),
+                yMinInt.data_ptr<int32_t>(), yMaxInt.data_ptr<int32_t>(),
+                normalize ? area.data_ptr<scalar_t>() : nullptr);
         }
         THCudaCheck(cudaGetLastError());
     }));

@@ -14,7 +14,7 @@ using std::max;
 namespace gpu {
 
 template <typename T, size_t N>
-using CudaAcsr = const at::PackedTensorAccessor<T, N, at::RestrictPtrTraits, int32_t>;
+using CudaAcsr = const at::PackedTensorAccessor32<T, N, torch::RestrictPtrTraits>;
 
 // TODO switch to square blocks
 template <bool normalize, bool exact, typename scalar_t>
@@ -173,20 +173,20 @@ void boxConvUpdateGradInput(
     const int threadsNeeded = tmpArray.numel();
     int numBlocks = (threadsNeeded + NUM_THREADS - 1) / NUM_THREADS;
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "gpu::boxConvUpdateGradInput", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.scalar_type(), "gpu::boxConvUpdateGradInput", ([&] {
         auto gradOutputIntFlattened = grad_output_integrated.view(
             {-1, grad_output_integrated.size(-2), grad_output_integrated.size(-1)});
         auto gradOutputIntAcsr =
-            gradOutputIntFlattened.packed_accessor<scalar_t, 3, at::RestrictPtrTraits, int32_t>();
+            gradOutputIntFlattened.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>();
 
         boxConvUpdateGradInputKernel <normalize, exact>
             <<<numBlocks, NUM_THREADS, 0, at::cuda::getCurrentCUDAStream()>>> (
-            gradOutputIntAcsr, tmpArray.data<scalar_t>(),
-            xMinInt.data<int32_t>(), xMaxInt.data<int32_t>(),
-            yMinInt.data<int32_t>(), yMaxInt.data<int32_t>(),
-            xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-            yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(),
-            normalize ? area.data<scalar_t>() : nullptr, xMinInt.numel());
+            gradOutputIntAcsr, tmpArray.data_ptr<scalar_t>(),
+            xMinInt.data_ptr<int32_t>(), xMaxInt.data_ptr<int32_t>(),
+            yMinInt.data_ptr<int32_t>(), yMaxInt.data_ptr<int32_t>(),
+            xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+            yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(),
+            normalize ? area.data_ptr<scalar_t>() : nullptr, xMinInt.numel());
         THCudaCheck(cudaGetLastError());
     }));
 }
@@ -428,45 +428,45 @@ void boxConvAccGradParameters(
     const int threadsNeeded = tmpArray.numel();
     int numBlocks = (threadsNeeded + NUM_THREADS - 1) / NUM_THREADS;
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "gpu::boxConvAccGradParameters", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.scalar_type(), "gpu::boxConvAccGradParameters", ([&] {
         auto inputIntFlattened = input_integrated.view(
             {-1, input_integrated.size(-2), input_integrated.size(-1)});
         auto inputIntAcsr =
-            inputIntFlattened.packed_accessor<scalar_t, 3, at::RestrictPtrTraits, int32_t>();
+            inputIntFlattened.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>();
 
         switch (parameter) {
         case Parameter::xMin:
             boxConvAccGradParametersKernel <Parameter::xMin, exact>
                 <<<numBlocks, NUM_THREADS, 0, at::cuda::getCurrentCUDAStream()>>> (
-                inputIntAcsr, tmpArray.data<scalar_t>(),
-                xMinInt.data<int32_t>(),  xMaxInt.data<int32_t>(),
-                yMinInt.data<int32_t>(),  yMaxInt.data<int32_t>(),
-                xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-                yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(), xMinInt.numel()); break;
+                inputIntAcsr, tmpArray.data_ptr<scalar_t>(),
+                xMinInt.data_ptr<int32_t>(),  xMaxInt.data_ptr<int32_t>(),
+                yMinInt.data_ptr<int32_t>(),  yMaxInt.data_ptr<int32_t>(),
+                xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+                yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(), xMinInt.numel()); break;
         case Parameter::xMax:
             boxConvAccGradParametersKernel <Parameter::xMax, exact>
                 <<<numBlocks, NUM_THREADS, 0, at::cuda::getCurrentCUDAStream()>>> (
-                inputIntAcsr, tmpArray.data<scalar_t>(),
-                xMinInt.data<int32_t>(),  xMaxInt.data<int32_t>(),
-                yMinInt.data<int32_t>(),  yMaxInt.data<int32_t>(),
-                xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-                yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(), xMinInt.numel()); break;
+                inputIntAcsr, tmpArray.data_ptr<scalar_t>(),
+                xMinInt.data_ptr<int32_t>(),  xMaxInt.data_ptr<int32_t>(),
+                yMinInt.data_ptr<int32_t>(),  yMaxInt.data_ptr<int32_t>(),
+                xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+                yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(), xMinInt.numel()); break;
         case Parameter::yMin:
             boxConvAccGradParametersKernel <Parameter::yMin, exact>
                 <<<numBlocks, NUM_THREADS, 0, at::cuda::getCurrentCUDAStream()>>> (
-                inputIntAcsr, tmpArray.data<scalar_t>(),
-                xMinInt.data<int32_t>(),  xMaxInt.data<int32_t>(),
-                yMinInt.data<int32_t>(),  yMaxInt.data<int32_t>(),
-                xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-                yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(), xMinInt.numel()); break;
+                inputIntAcsr, tmpArray.data_ptr<scalar_t>(),
+                xMinInt.data_ptr<int32_t>(),  xMaxInt.data_ptr<int32_t>(),
+                yMinInt.data_ptr<int32_t>(),  yMaxInt.data_ptr<int32_t>(),
+                xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+                yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(), xMinInt.numel()); break;
         case Parameter::yMax:
             boxConvAccGradParametersKernel <Parameter::yMax, exact>
                 <<<numBlocks, NUM_THREADS, 0, at::cuda::getCurrentCUDAStream()>>> (
-                inputIntAcsr, tmpArray.data<scalar_t>(),
-                xMinInt.data<int32_t>(),  xMaxInt.data<int32_t>(),
-                yMinInt.data<int32_t>(),  yMaxInt.data<int32_t>(),
-                xMinFrac.data<scalar_t>(), xMaxFrac.data<scalar_t>(),
-                yMinFrac.data<scalar_t>(), yMaxFrac.data<scalar_t>(), xMinInt.numel()); break;
+                inputIntAcsr, tmpArray.data_ptr<scalar_t>(),
+                xMinInt.data_ptr<int32_t>(),  xMaxInt.data_ptr<int32_t>(),
+                yMinInt.data_ptr<int32_t>(),  yMaxInt.data_ptr<int32_t>(),
+                xMinFrac.data_ptr<scalar_t>(), xMaxFrac.data_ptr<scalar_t>(),
+                yMinFrac.data_ptr<scalar_t>(), yMaxFrac.data_ptr<scalar_t>(), xMinInt.numel()); break;
         }
         THCudaCheck(cudaGetLastError());
     }));

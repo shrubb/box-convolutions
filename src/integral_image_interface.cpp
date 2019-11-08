@@ -3,10 +3,10 @@
 
 #include <integral_image.h>
 
-#define CHECK_CONTIGUOUS(x) AT_CHECK(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
 
 at::Tensor integral_image(at::Tensor input) {
-    AT_CHECK(input.dim() >= 2, "integral image input must have >=2 dimensions")
+    TORCH_CHECK(input.dim() >= 2, "integral image input must have >=2 dimensions")
     input = input.contiguous();
     
     // The result will have extra row and column for zeros

@@ -16,25 +16,25 @@ void splitParameters(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac) {
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "cpu::splitParameters", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.scalar_type(), "cpu::splitParameters", ([&] {
         scalar_t minInt, maxInt;
 
         for (int i = 0; i < x_min.numel(); ++i) {
-            minInt = std::ceil(x_min.data<scalar_t>()[i]);
-            xMinFrac.data<scalar_t>()[i] = minInt - x_min.data<scalar_t>()[i];
-            xMinInt.data<int>()[i] = static_cast<int>(minInt);
+            minInt = std::ceil(x_min.data_ptr<scalar_t>()[i]);
+            xMinFrac.data_ptr<scalar_t>()[i] = minInt - x_min.data_ptr<scalar_t>()[i];
+            xMinInt.data_ptr<int>()[i] = static_cast<int>(minInt);
 
-            minInt = std::ceil(y_min.data<scalar_t>()[i]);
-            yMinFrac.data<scalar_t>()[i] = minInt - y_min.data<scalar_t>()[i];
-            yMinInt.data<int>()[i] = static_cast<int>(minInt);
+            minInt = std::ceil(y_min.data_ptr<scalar_t>()[i]);
+            yMinFrac.data_ptr<scalar_t>()[i] = minInt - y_min.data_ptr<scalar_t>()[i];
+            yMinInt.data_ptr<int>()[i] = static_cast<int>(minInt);
 
-            maxInt = std::floor(x_max.data<scalar_t>()[i]);
-            xMaxFrac.data<scalar_t>()[i] = x_max.data<scalar_t>()[i] - maxInt;
-            xMaxInt.data<int>()[i] = static_cast<int>(maxInt) + 1;
+            maxInt = std::floor(x_max.data_ptr<scalar_t>()[i]);
+            xMaxFrac.data_ptr<scalar_t>()[i] = x_max.data_ptr<scalar_t>()[i] - maxInt;
+            xMaxInt.data_ptr<int>()[i] = static_cast<int>(maxInt) + 1;
 
-            maxInt = std::floor(y_max.data<scalar_t>()[i]);
-            yMaxFrac.data<scalar_t>()[i] = y_max.data<scalar_t>()[i] - maxInt;
-            yMaxInt.data<int>()[i] = static_cast<int>(maxInt) + 1;
+            maxInt = std::floor(y_max.data_ptr<scalar_t>()[i]);
+            yMaxFrac.data_ptr<scalar_t>()[i] = y_max.data_ptr<scalar_t>()[i] - maxInt;
+            yMaxInt.data_ptr<int>()[i] = static_cast<int>(maxInt) + 1;
         }
     }));
 }
@@ -45,25 +45,25 @@ void splitParametersUpdateGradInput(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac) {
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "cpu::splitParametersUpdateGradInput", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.scalar_type(), "cpu::splitParametersUpdateGradInput", ([&] {
         scalar_t minInt, maxInt;
 
         for (int i = 0; i < x_min.numel(); ++i) {
-            minInt = std::ceil(-x_max.data<scalar_t>()[i]);
-            xMinFrac.data<scalar_t>()[i] = minInt + x_max.data<scalar_t>()[i];
-            xMinInt.data<int>()[i] = static_cast<int>(minInt);
+            minInt = std::ceil(-x_max.data_ptr<scalar_t>()[i]);
+            xMinFrac.data_ptr<scalar_t>()[i] = minInt + x_max.data_ptr<scalar_t>()[i];
+            xMinInt.data_ptr<int>()[i] = static_cast<int>(minInt);
 
-            minInt = std::ceil(-y_max.data<scalar_t>()[i]);
-            yMinFrac.data<scalar_t>()[i] = minInt + y_max.data<scalar_t>()[i];
-            yMinInt.data<int>()[i] = static_cast<int>(minInt);
+            minInt = std::ceil(-y_max.data_ptr<scalar_t>()[i]);
+            yMinFrac.data_ptr<scalar_t>()[i] = minInt + y_max.data_ptr<scalar_t>()[i];
+            yMinInt.data_ptr<int>()[i] = static_cast<int>(minInt);
 
-            maxInt = std::floor(-x_min.data<scalar_t>()[i]) + 1;
-            xMaxFrac.data<scalar_t>()[i] = -x_min.data<scalar_t>()[i] + 1 - maxInt;
-            xMaxInt.data<int>()[i] = static_cast<int>(maxInt);
+            maxInt = std::floor(-x_min.data_ptr<scalar_t>()[i]) + 1;
+            xMaxFrac.data_ptr<scalar_t>()[i] = -x_min.data_ptr<scalar_t>()[i] + 1 - maxInt;
+            xMaxInt.data_ptr<int>()[i] = static_cast<int>(maxInt);
 
-            maxInt = std::floor(-y_min.data<scalar_t>()[i]) + 1;
-            yMaxFrac.data<scalar_t>()[i] = -y_min.data<scalar_t>()[i] + 1 - maxInt;
-            yMaxInt.data<int>()[i] = static_cast<int>(maxInt);
+            maxInt = std::floor(-y_min.data_ptr<scalar_t>()[i]) + 1;
+            yMaxFrac.data_ptr<scalar_t>()[i] = -y_min.data_ptr<scalar_t>()[i] + 1 - maxInt;
+            yMaxInt.data_ptr<int>()[i] = static_cast<int>(maxInt);
         }
     }));
 }
@@ -74,25 +74,25 @@ void splitParametersAccGradParameters(
     at::Tensor & xMinInt , at::Tensor & xMaxInt , at::Tensor & yMinInt , at::Tensor & yMaxInt ,
     at::Tensor & xMinFrac, at::Tensor & xMaxFrac, at::Tensor & yMinFrac, at::Tensor & yMaxFrac) {
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.type(), "cpu::splitParametersAccGradParams", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(x_min.scalar_type(), "cpu::splitParametersAccGradParams", ([&] {
         scalar_t minInt, maxInt;
 
         for (int i = 0; i < x_min.numel(); ++i) {
-            minInt = std::ceil(x_min.data<scalar_t>()[i] - 1);
-            xMinFrac.data<scalar_t>()[i] = minInt - x_min.data<scalar_t>()[i] + 1;
-            xMinInt.data<int>()[i] = static_cast<int>(minInt);
+            minInt = std::ceil(x_min.data_ptr<scalar_t>()[i] - 1);
+            xMinFrac.data_ptr<scalar_t>()[i] = minInt - x_min.data_ptr<scalar_t>()[i] + 1;
+            xMinInt.data_ptr<int>()[i] = static_cast<int>(minInt);
 
-            minInt = std::ceil(y_min.data<scalar_t>()[i] - 1);
-            yMinFrac.data<scalar_t>()[i] = minInt - y_min.data<scalar_t>()[i] + 1;
-            yMinInt.data<int>()[i] = static_cast<int>(minInt);
+            minInt = std::ceil(y_min.data_ptr<scalar_t>()[i] - 1);
+            yMinFrac.data_ptr<scalar_t>()[i] = minInt - y_min.data_ptr<scalar_t>()[i] + 1;
+            yMinInt.data_ptr<int>()[i] = static_cast<int>(minInt);
 
-            maxInt = std::floor(x_max.data<scalar_t>()[i]);
-            xMaxFrac.data<scalar_t>()[i] = x_max.data<scalar_t>()[i] - maxInt;
-            xMaxInt.data<int>()[i] = static_cast<int>(maxInt);
+            maxInt = std::floor(x_max.data_ptr<scalar_t>()[i]);
+            xMaxFrac.data_ptr<scalar_t>()[i] = x_max.data_ptr<scalar_t>()[i] - maxInt;
+            xMaxInt.data_ptr<int>()[i] = static_cast<int>(maxInt);
 
-            maxInt = std::floor(y_max.data<scalar_t>()[i]);
-            yMaxFrac.data<scalar_t>()[i] = y_max.data<scalar_t>()[i] - maxInt;
-            yMaxInt.data<int>()[i] = static_cast<int>(maxInt);
+            maxInt = std::floor(y_max.data_ptr<scalar_t>()[i]);
+            yMaxFrac.data_ptr<scalar_t>()[i] = y_max.data_ptr<scalar_t>()[i] - maxInt;
+            yMaxInt.data_ptr<int>()[i] = static_cast<int>(maxInt);
         }
     }));
 }
@@ -107,7 +107,7 @@ void boxConvUpdateOutput(
     int h = output.size(-2);
     int w = output.size(-1);
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.type(), "cpu::boxConvUpdateOutput", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(output.scalar_type(), "cpu::boxConvUpdateOutput", ([&] {
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
         auto yMinIntAcsr = yMinInt.accessor<int, 2>();
@@ -124,7 +124,7 @@ void boxConvUpdateOutput(
             areaAcsr = area.accessor<scalar_t, 2>();
         }
 
-        scalar_t *outputData = output.data<scalar_t>();
+        scalar_t *outputData = output.data_ptr<scalar_t>();
         
         for (int batchIdx = 0; batchIdx < input_integrated.size(0); ++batchIdx) {
             for (int inPlaneIdx = 0; inPlaneIdx < input_integrated.size(1); ++inPlaneIdx) {
@@ -293,7 +293,7 @@ void boxConvUpdateGradInput(
     int h = tmpArray.size(-2);
     int w = tmpArray.size(-1);
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "cpu::boxConvUpdateGradInput", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.scalar_type(), "cpu::boxConvUpdateGradInput", ([&] {
 
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
@@ -311,7 +311,7 @@ void boxConvUpdateGradInput(
             areaAcsr = area.accessor<scalar_t, 2>();
         }
 
-        scalar_t *tmpArrayData = tmpArray.data<scalar_t>();
+        scalar_t *tmpArrayData = tmpArray.data_ptr<scalar_t>();
 
         for (int batchIdx = 0; batchIdx < grad_output_integrated.size(0); ++batchIdx) {
             for (int inPlaneIdx = 0; inPlaneIdx < grad_output_integrated.size(1); ++inPlaneIdx) {
@@ -488,7 +488,7 @@ void boxConvAccGradParameters(
     int h = tmpArray.size(-2);
     int w = tmpArray.size(-1);
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.type(), "cpu::boxConvAccGradParameters", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(tmpArray.scalar_type(), "cpu::boxConvAccGradParameters", ([&] {
         
         auto xMinIntAcsr = xMinInt.accessor<int, 2>();
         auto xMaxIntAcsr = xMaxInt.accessor<int, 2>();
@@ -500,7 +500,7 @@ void boxConvAccGradParameters(
         auto yMinFracAcsr = yMinFrac.accessor<scalar_t, 2>();
         auto yMaxFracAcsr = yMaxFrac.accessor<scalar_t, 2>();
 
-        scalar_t *tmpArrayData = tmpArray.data<scalar_t>();
+        scalar_t *tmpArrayData = tmpArray.data_ptr<scalar_t>();
 
         for (int batchIdx = 0; batchIdx < input_integrated.size(0); ++batchIdx) {
             for (int inPlaneIdx = 0; inPlaneIdx < input_integrated.size(1); ++inPlaneIdx) {
@@ -730,10 +730,10 @@ void clipParameters(
     at::Tensor & paramMin, at::Tensor & paramMax,
     const double reparametrization, const double minSize, const double maxSize) {
 
-    AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.type(), "cpu::clipParameters", ([&] {
+    AT_DISPATCH_FLOATING_TYPES_AND_HALF(paramMin.scalar_type(), "cpu::clipParameters", ([&] {
 
-        scalar_t *paramMinPtr = paramMin.data<scalar_t>();
-        scalar_t *paramMaxPtr = paramMax.data<scalar_t>();
+        scalar_t *paramMinPtr = paramMin.data_ptr<scalar_t>();
+        scalar_t *paramMaxPtr = paramMax.data_ptr<scalar_t>();
 
         const double inverseReparam = 1.0 / reparametrization;
 
