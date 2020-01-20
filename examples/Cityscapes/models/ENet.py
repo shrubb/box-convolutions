@@ -149,6 +149,37 @@ class BoxOnlyENet(ENet):
 
             nn.ConvTranspose2d(16, n_classes+1, (2,2), (2,2))])
 
+class ENetMinus(ENet):
+    def __init__(self, n_classes=19, max_input_h=512, max_input_w=1024):
+        h, w = max_input_h, max_input_w # shorten names for convenience
+        r = 0.860 # reparametrization factor
+
+        nn.ModuleList.__init__(self, [
+            Downsampler(3, 16),
+            Bottleneck(16, 64, 0.01, downsample=True),
+
+            Bottleneck(64, 64, 0.01),
+            Bottleneck(64, 64, 0.01),
+
+            Bottleneck(64, 128, 0.1, downsample=True),
+
+            Bottleneck(128, 128, 0.1),
+            Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
+            Bottleneck(128, 128, 0.1),
+            Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
+
+            Bottleneck(128, 128, 0.1),
+            Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
+            Bottleneck(128, 128, 0.1),
+            Bottleneck(128, 128, 0.1, asymmetric_ksize=5),
+
+            Upsampler(128, 64),
+
+            Bottleneck(64, 64, 0.1),
+
+            Upsampler(64, 16),
+
+            nn.ConvTranspose2d(16, n_classes+1, (2,2), (2,2))])
 
 class Upsampler(nn.Module):
     def __init__(self, in_channels, out_channels):

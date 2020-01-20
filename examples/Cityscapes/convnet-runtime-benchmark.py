@@ -10,7 +10,7 @@
 """
 import torch
 
-architecture = 'ENet' # choice: ENet / BoxENet / ERFNet / BoxERFNet
+architecture = 'ENet' # choice: ENet / BoxENet / ERFNet / BoxERFNet / ENetMinus
 device = 'cuda' # or 'cpu'
 dtype = torch.float32
 
@@ -31,7 +31,7 @@ print('Device:', input_image.device)
 print('Data type:', input_image.dtype)
 
 from models.ERFNet import ERFNet, BoxERFNet
-from models.ENet import ENet, BoxENet
+from models.ENet import ENet, BoxENet, BoxOnlyENet, ENetMinus
 
 model = globals()[architecture](n_classes).to(input_image)
 

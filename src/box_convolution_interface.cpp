@@ -34,14 +34,13 @@ at::Tensor box_convolution_forward(
         "BoxConv2d: all parameters must have equal number of columns");
 
     // Split x_min, x_max, y_min, y_max into integer and fractional parts
-    // TODO how to force is_variable(false)? How to set is_variable on an existing tensor?
-    auto intOptions = x_min.options().is_variable(true).dtype(at::ScalarType::Int);
+    auto intOptions = x_min.options().dtype(at::ScalarType::Int);
     auto xMinInt = at::empty(x_min.sizes(), intOptions);
     auto xMaxInt = at::empty(x_min.sizes(), intOptions);
     auto yMinInt = at::empty(x_min.sizes(), intOptions);
     auto yMaxInt = at::empty(x_min.sizes(), intOptions);
 
-    auto fracOptions = x_min.options().is_variable(false);
+    auto fracOptions = x_min.options();
     auto xMinFrac = at::empty(x_min.sizes(), fracOptions);
     auto xMaxFrac = at::empty(x_min.sizes(), fracOptions);
     auto yMinFrac = at::empty(x_min.sizes(), fracOptions);
@@ -180,18 +179,17 @@ std::vector<at::Tensor> box_convolution_backward(
 
     // Return value
     // TODO change `nullTensor` to Python `None`
-    at::Tensor nullTensor = at::empty({0}, at::TensorOptions().is_variable(true));
+    at::Tensor nullTensor = at::empty({0}, at::TensorOptions());
     at::Tensor gradInput = nullTensor;
 
     // Allocate memory for splitting x_min, x_max, y_min, y_max into integer and fractional parts
-    // TODO how to force is_variable(false)? How to set is_variable on an existing tensor?
-    auto intOptions = x_min.options().is_variable(true).dtype(at::ScalarType::Int);
+    auto intOptions = x_min.options().dtype(at::ScalarType::Int);
     auto xMinInt = at::empty(x_min.sizes(), intOptions);
     auto xMaxInt = at::empty(x_min.sizes(), intOptions);
     auto yMinInt = at::empty(x_min.sizes(), intOptions);
     auto yMaxInt = at::empty(x_min.sizes(), intOptions);
 
-    auto fracOptions = x_min.options().is_variable(false);
+    auto fracOptions = x_min.options();
     auto xMinFrac = at::empty(x_min.sizes(), fracOptions);
     auto xMaxFrac = at::empty(x_min.sizes(), fracOptions);
     auto yMinFrac = at::empty(x_min.sizes(), fracOptions);
